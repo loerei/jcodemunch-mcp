@@ -194,11 +194,14 @@ class TestHeldContextManager:
     def test_wait_seconds_polls_until_lock_released(self, tmp_path):
         """Lock acquired by another 'process' is released; held() with wait
         should acquire after a brief poll."""
-        # Pre-acquire, then release on a timer via thread
+        # Pre-acquire, then release on a timer via thread.
+        # Release delay and elapsed ceiling sized to absorb Windows CI jitter:
+        # `time.sleep(N)` is a floor, not a ceiling, and contended Actions
+        # runners can stretch a 0.3s sleep enough to miss the deadline.
         acquire("test", "alpha", str(tmp_path))
         import threading
         def _release_after():
-            time.sleep(0.3)
+            time.sleep(0.5)
             release("test", "alpha", str(tmp_path))
         threading.Thread(target=_release_after, daemon=True).start()
 
@@ -209,7 +212,7 @@ class TestHeldContextManager:
         ) as got:
             elapsed = time.monotonic() - start
             assert got is True
-            assert 0.2 < elapsed < 2.0  # waited briefly, not instantaneous, not too long
+            assert 0.4 < elapsed < 3.0  # waited briefly, not instantaneous, not too long
 
     def test_wait_seconds_gives_up(self, tmp_path):
         """If lock stays held longer than wait_seconds, held() returns False."""

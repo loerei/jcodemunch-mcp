@@ -2,6 +2,24 @@
 
 All notable changes to jcodemunch-mcp are documented here.
 
+## [1.108.11] — 2026-05-15 — drift cleanup + Windows-CI test hardening
+
+Docs / hygiene patch. No behavior change.
+
+- **Config template:** `list_workspaces` (added v1.108.0) was missing
+  from the `all_tools` list embedded in the generated `config.jsonc`
+  template. New users running `jcodemunch-mcp init` will now see it
+  alongside the other disable-able tools.
+- **Windows CI flake:** `test_wait_seconds_polls_until_lock_released`
+  (`tests/test_process_locks.py:194`) hardened to absorb GitHub Actions
+  Windows-runner jitter. The release-thread `time.sleep(0.3)` was a
+  floor, not a ceiling, and contended runners would stretch it past the
+  2.0s elapsed-assertion ceiling. Bumped to 0.5s release / 3.0s ceiling;
+  the underlying lock-semantics contract is unchanged.
+- **README recency block:** regenerated via `jcodemunch-mcp whatsnew`
+  to reflect v1.108.7 through v1.108.11 (was stuck on v1.91/v1.92/v1.93
+  from 2026-05-09).
+
 ## [1.108.10] — 2026-05-15 — schema budget cleanup (post-v1.108.0/v1.108.6 drift)
 
 Schema-budget regression caught after v1.108.9 ship. `core_compact` had

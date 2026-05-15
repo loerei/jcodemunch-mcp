@@ -96,9 +96,11 @@ is a byte the agent doesn't pay to read.
 <!-- WHATSNEW:START -->
 #### What's new
 
-- **[v1.93.0](https://github.com/jgravelle/jcodemunch-mcp/releases/tag/v1.93.0)** (2026-05-09) — TypeScript barrel-aware import graph + dotted-name resolver fix
-- **[v1.92.0](https://github.com/jgravelle/jcodemunch-mcp/releases/tag/v1.92.0)** (2026-05-09) — coupling axis: filename-pattern filter for inline test conventions
-- **[v1.91.0](https://github.com/jgravelle/jcodemunch-mcp/releases/tag/v1.91.0)** (2026-05-09) — coupling axis: exclude tests/benchmarks/scripts from the metric
+- **[v1.108.11](https://github.com/jgravelle/jcodemunch-mcp/releases/tag/v1.108.11)** (2026-05-15) — drift cleanup + Windows-CI test hardening
+- **[v1.108.10](https://github.com/jgravelle/jcodemunch-mcp/releases/tag/v1.108.10)** (2026-05-15) — schema budget cleanup (post-v1.108.0/v1.108.6 drift)
+- **[v1.108.9](https://github.com/jgravelle/jcodemunch-mcp/releases/tag/v1.108.9)** (2026-05-14) — escape hatch for the `_UNDISABLEABLE_TOOLS` safety net (#299)
+- **[v1.108.8](https://github.com/jgravelle/jcodemunch-mcp/releases/tag/v1.108.8)** (2026-05-14) — `jcodemunch_guide` honors `disabled_tools` (#298)
+- **[v1.108.7](https://github.com/jgravelle/jcodemunch-mcp/releases/tag/v1.108.7)** (2026-05-12) — Windows hook path: forward slashes + path-shape-agnostic dedup
 <!-- WHATSNEW:END -->
 
 ![License](https://img.shields.io/badge/license-dual--use-blue)

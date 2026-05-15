@@ -1315,6 +1315,7 @@ def generate_template() -> str:
         "invalidate_cache",
         "jcodemunch_guide",
         "list_repos",
+        "list_workspaces",
         "plan_refactoring",
         "plan_turn",
         "register_edit",
