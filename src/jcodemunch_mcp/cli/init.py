@@ -929,8 +929,15 @@ def run_init(
     no_backup: bool = False,
     skills: bool = False,
     skills_scope: str = "global",
+    share_savings: Optional[str] = None,
 ) -> int:
-    """Run the init flow. Returns exit code (0 = success)."""
+    """Run the init flow. Returns exit code (0 = success).
+
+    ``share_savings`` accepts ``"on"`` or ``"off"`` (or ``None`` to leave unchanged).
+    When set, writes the explicit value into ``~/.code-index/config.jsonc`` before
+    any other init step runs, so the user's preference survives even if the rest
+    of init is aborted partway through.
+    """
     if demo:
         dry_run = True  # demo never writes anything
     backup = not no_backup
@@ -943,6 +950,32 @@ def run_init(
 
     # Collects (action_label, benefit) for the demo summary
     _demo_actions: list[tuple[str, str]] = []
+
+    # ----- Step 0: explicit share_savings opt-in / opt-out -----
+    # Applied before MCP-client registration so the user's preference is durable
+    # even if a later step is interrupted. Survives package upgrades because
+    # config --upgrade preserves user-set values.
+    if share_savings is not None:
+        normalized = str(share_savings).strip().lower()
+        if normalized in ("on", "true", "1", "yes"):
+            _ss_value = True
+        elif normalized in ("off", "false", "0", "no"):
+            _ss_value = False
+        else:
+            print(f"  share_savings:  invalid value '{share_savings}' (expected on|off); skipped")
+            _ss_value = None
+        if _ss_value is not None:
+            if dry_run:
+                print(f"  share_savings:  would write {_ss_value} to ~/.code-index/config.jsonc")
+                if demo:
+                    _demo_actions.append((
+                        f"Write share_savings={_ss_value} to ~/.code-index/config.jsonc",
+                        "Locks the telemetry-counter setting at install time; survives package upgrades because config --upgrade preserves user-set values",
+                    ))
+            else:
+                from .. import config as _cfg
+                ss_path = _cfg.apply_share_savings(_ss_value)
+                print(f"  share_savings:  wrote {_ss_value} to {ss_path}")
 
     # ----- Step 1: MCP client registration -----
     detected = _detect_clients()

@@ -2,6 +2,81 @@
 
 All notable changes to jcodemunch-mcp are documented here.
 
+## [1.108.21] - 2026-05-22 - explicit telemetry opt-out lever, speedreview Action pinned, docs hardening
+
+Patch release covering three additive enterprise-hardening items.
+
+### Explicit `share_savings` opt-out lever
+
+New flag `--share-savings on|off` (and shorthand `--no-share-savings`) on both
+`jcodemunch-mcp init` and `jcodemunch-mcp install <agent>`. When passed, writes
+`"share_savings": <value>` explicitly into `~/.code-index/config.jsonc` before
+any other init step runs, so the preference is durable even if the rest of
+init is aborted partway through. Survives `jcodemunch-mcp config --upgrade`
+across package upgrades; new regression tests in `tests/test_share_savings.py`
+lock the invariant.
+
+Default behavior is unchanged. The `share_savings` counter remains the primary
+visibility we have into adoption growth. The new flag exists to give the
+security-conscious a documented, durable opt-out without editing JSON. For
+managed-endpoint deployments, the recommended posture is to set
+`"JCODEMUNCH_SHARE_SAVINGS": "0"` in the MCP server env block in `.mcp.json` or
+`claude_desktop_config.json` (lives in source control, survives any config-file
+state).
+
+New helpers in `config.py`:
+- `set_bool_key(content, key, value)` — regex-based mutator that handles the
+  three input shapes (commented template form, existing active form, absent
+  key) idempotently. Reusable for future boolean config keys.
+- `apply_share_savings(value, storage_path=None)` — end-to-end writer that
+  creates `config.jsonc` from the template if missing, then sets the key.
+
+### Speedreview Action: pinned package versions, tagged usage pattern
+
+The `speedreview/action.yml` `pip install` line previously installed
+`jcodemunch-mcp` and `openai` unpinned. Two changes:
+
+- New action inputs `jcodemunch_version` (default `==1.108.21`) and
+  `openai_version` (default `>=1.50,<2`) so the package versions are pinned
+  by default and overridable per-workflow.
+- README and `speedreview/README.md` updated to recommend `@v1.108.21` (or a
+  commit SHA for stricter supply-chain hygiene) instead of `@main`. The bare
+  `@main` form is no longer recommended for production workflows.
+
+### Documentation hardening pass
+
+`SECURITY.md` gained three new sections:
+
+- **Files this server treats as security-sensitive** — explicit catalog of
+  user-writable files that participate in the server's trust chain
+  (`~/.code-index/config.jsonc`, generated MCP client configs,
+  `~/.claude/settings.json` hooks, `.github/hooks/hooks.json`, agent-policy
+  files like `CLAUDE.md` / `AGENTS.md`).
+- **Persistent processes installed by `watch-install`** — the exact systemd
+  unit name (Linux), LaunchAgent plist (macOS), and Task Scheduler entry
+  (Windows) so endpoint-management hunts can map them.
+- **Cache integrity verification modes** — documents the limitation of the
+  default `verify=True` mode (self-referential against the local cache) and
+  references the externally-attested mode on the near-term roadmap.
+
+`README.md` install section gained an extras matrix that lists which system
+surfaces each `[extra]` pulls in: notably `[groq-voice]` brings `sounddevice`
++ `numpy` (microphone access), `[groq-explain]` brings `Pillow` (image
+decode), and `[all]` bundles both. Useful for managed-endpoint deployments
+where audio / camera access on developer machines is policy-restricted.
+
+`CONFIGURATION.md` "Privacy and telemetry" section expanded to document the
+three durable `share_savings` opt-out paths. New "Cross-repo traversal"
+section explicitly warns about data-mingling when `cross_repo_default=true`
+is set in a deployment with both first-party and third-party indexed repos.
+
+### Tests
+
+```
+tests/test_share_savings.py            8 passed
+full suite                          4400+ passed
+```
+
 ## [1.108.20] - 2026-05-19 - watcher fast-path applies all discovery filters via shared helper (#306)
 
 Patch release. Filed as a follow-up audit to #300/#1.108.19 after

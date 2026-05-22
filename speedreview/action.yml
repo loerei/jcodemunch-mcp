@@ -30,6 +30,23 @@ inputs:
     description: "Base ref to diff against (default: auto-detect from PR)"
     required: false
     default: ""
+  jcodemunch_version:
+    description: >-
+      Exact PyPI version specifier for jcodemunch-mcp (e.g. "==1.108.20" or
+      ">=1.108.20,<1.109"). Default pins to the version this action was tagged
+      against, which is the only version we've validated for this release.
+      Override only if you have a specific reason and have validated the
+      replacement against your workflow.
+    required: false
+    default: "==1.108.21"
+  openai_version:
+    description: >-
+      PyPI version specifier for the openai SDK. Constraint-form default
+      (>=1.50,<2) admits security patches within the 1.x line without picking
+      up breaking 2.x changes. Override with an exact pin for maximum
+      reproducibility.
+    required: false
+    default: ">=1.50,<2"
 
 runs:
   using: "composite"
@@ -49,7 +66,7 @@ runs:
 
     - name: Install dependencies
       shell: bash
-      run: pip install --quiet jcodemunch-mcp openai
+      run: pip install --quiet "jcodemunch-mcp${{ inputs.jcodemunch_version }}" "openai${{ inputs.openai_version }}"
 
     - name: Run speedreview
       shell: bash

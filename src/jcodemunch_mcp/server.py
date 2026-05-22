@@ -6475,6 +6475,24 @@ def main(argv: Optional[list[str]] = None):
         dest="no_backup",
         help="Skip creating .bak backups of modified files",
     )
+    init_parser.add_argument(
+        "--share-savings",
+        choices=["on", "off"],
+        default=None,
+        dest="share_savings",
+        help=(
+            "Explicitly write share_savings:<on|off> into ~/.code-index/config.jsonc. "
+            "Useful for hardened install templates that need a durable opt-out; survives "
+            "package upgrades because config --upgrade preserves user-set values."
+        ),
+    )
+    init_parser.add_argument(
+        "--no-share-savings",
+        action="store_const",
+        const="off",
+        dest="share_savings",
+        help="Shorthand for --share-savings=off.",
+    )
 
     # --- install (per-agent sugar over init) ---
     install_parser = subparsers.add_parser(
@@ -6522,6 +6540,23 @@ def main(argv: Optional[list[str]] = None):
     install_parser.add_argument(
         "--no-backup", action="store_true", dest="no_backup",
         help="Skip creating .bak backups of modified files",
+    )
+    install_parser.add_argument(
+        "--share-savings",
+        choices=["on", "off"],
+        default=None,
+        dest="share_savings",
+        help=(
+            "Explicitly write share_savings:<on|off> into ~/.code-index/config.jsonc. "
+            "Survives package upgrades."
+        ),
+    )
+    install_parser.add_argument(
+        "--no-share-savings",
+        action="store_const",
+        const="off",
+        dest="share_savings",
+        help="Shorthand for --share-savings=off.",
     )
 
     # --- install-status (top-level read-only inspector) ---
@@ -6925,6 +6960,7 @@ def main(argv: Optional[list[str]] = None):
             demo=args.demo,
             yes=args.yes,
             no_backup=args.no_backup,
+            share_savings=getattr(args, "share_savings", None),
         ))
 
     if args.command == "install":
@@ -6970,6 +7006,7 @@ def main(argv: Optional[list[str]] = None):
             no_backup=getattr(args, "no_backup", False),
             skills=getattr(args, "skills", False),
             skills_scope=getattr(args, "skills_scope", "global"),
+            share_savings=getattr(args, "share_savings", None),
         ))
 
     if args.command == "install-status":

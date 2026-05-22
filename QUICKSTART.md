@@ -1,19 +1,19 @@
 > [!WARNING]
-> **PyPI install temporarily unavailable.** Bare `pip install jcodemunch-mcp` and `uvx jcodemunch-mcp` return "no versions found" while PyPI Admins review a false-positive quarantine flag triggered after the v1.108.20 release. **The one-click install badges below have been temporarily repointed at the GitHub-release wheel and work normally.** For manual install, use the wheel directly:
+> **PyPI install temporarily unavailable.** Bare `pip install jcodemunch-mcp` and `uvx jcodemunch-mcp` return "no versions found" while PyPI Admins review a false-positive quarantine flag triggered after the v1.108.21 release. **The one-click install badges below have been temporarily repointed at the GitHub-release wheel and work normally.** For manual install, use the wheel directly:
 >
 > ```
-> pip install https://github.com/jgravelle/jcodemunch-mcp/releases/download/v1.108.20/jcodemunch_mcp-1.108.20-py3-none-any.whl
+> pip install https://github.com/jgravelle/jcodemunch-mcp/releases/download/v1.108.21/jcodemunch_mcp-1.108.21-py3-none-any.whl
 > ```
 >
-> `uvx` equivalent: `uvx --from https://github.com/jgravelle/jcodemunch-mcp/releases/download/v1.108.20/jcodemunch_mcp-1.108.20-py3-none-any.whl jcodemunch-mcp`
+> `uvx` equivalent: `uvx --from https://github.com/jgravelle/jcodemunch-mcp/releases/download/v1.108.21/jcodemunch_mcp-1.108.21-py3-none-any.whl jcodemunch-mcp`
 >
 > Sibling packages (`jdocmunch-mcp`, `jdatamunch-mcp`) are unaffected and install normally. Status, timeline, and live updates: [issue #308](https://github.com/jgravelle/jcodemunch-mcp/issues/308). Mike Fiedler at PSF Security is out through May 26; the broader PyPI admin queue may resolve sooner.
 
 #### One-click installs:
 
-[![Install in VS Code](https://img.shields.io/badge/VS_Code-Install_jCodeMunch-007ACC?style=for-the-badge&logo=visualstudiocode&logoColor=white)](vscode:mcp/install?%7B%22name%22%3A%20%22jcodemunch%22%2C%20%22command%22%3A%20%22uvx%22%2C%20%22args%22%3A%20%5B%22--from%22%2C%20%22https%3A//github.com/jgravelle/jcodemunch-mcp/releases/download/v1.108.20/jcodemunch_mcp-1.108.20-py3-none-any.whl%22%2C%20%22jcodemunch-mcp%22%5D%7D)
-[![Install in VS Code Insiders](https://img.shields.io/badge/VS_Code_Insiders-Install-24bfa5?style=for-the-badge&logo=visualstudiocode&logoColor=white)](vscode-insiders:mcp/install?%7B%22name%22%3A%20%22jcodemunch%22%2C%20%22command%22%3A%20%22uvx%22%2C%20%22args%22%3A%20%5B%22--from%22%2C%20%22https%3A//github.com/jgravelle/jcodemunch-mcp/releases/download/v1.108.20/jcodemunch_mcp-1.108.20-py3-none-any.whl%22%2C%20%22jcodemunch-mcp%22%5D%7D)
-[![Install in Cursor](https://img.shields.io/badge/Cursor-Install_jCodeMunch-000000?style=for-the-badge&logo=cursor&logoColor=white)](cursor://anysphere.cursor-deeplink/mcp/install?name=jcodemunch&config=eyJjb21tYW5kIjogInV2eCIsICJhcmdzIjogWyItLWZyb20iLCAiaHR0cHM6Ly9naXRodWIuY29tL2pncmF2ZWxsZS9qY29kZW11bmNoLW1jcC9yZWxlYXNlcy9kb3dubG9hZC92MS4xMDguMjAvamNvZGVtdW5jaF9tY3AtMS4xMDguMjAtcHkzLW5vbmUtYW55LndobCIsICJqY29kZW11bmNoLW1jcCJdfQ==)
+[![Install in VS Code](https://img.shields.io/badge/VS_Code-Install_jCodeMunch-007ACC?style=for-the-badge&logo=visualstudiocode&logoColor=white)](vscode:mcp/install?%7B%22name%22%3A%20%22jcodemunch%22%2C%20%22command%22%3A%20%22uvx%22%2C%20%22args%22%3A%20%5B%22--from%22%2C%20%22https%3A//github.com/jgravelle/jcodemunch-mcp/releases/download/v1.108.21/jcodemunch_mcp-1.108.21-py3-none-any.whl%22%2C%20%22jcodemunch-mcp%22%5D%7D)
+[![Install in VS Code Insiders](https://img.shields.io/badge/VS_Code_Insiders-Install-24bfa5?style=for-the-badge&logo=visualstudiocode&logoColor=white)](vscode-insiders:mcp/install?%7B%22name%22%3A%20%22jcodemunch%22%2C%20%22command%22%3A%20%22uvx%22%2C%20%22args%22%3A%20%5B%22--from%22%2C%20%22https%3A//github.com/jgravelle/jcodemunch-mcp/releases/download/v1.108.21/jcodemunch_mcp-1.108.21-py3-none-any.whl%22%2C%20%22jcodemunch-mcp%22%5D%7D)
+[![Install in Cursor](https://img.shields.io/badge/Cursor-Install_jCodeMunch-000000?style=for-the-badge&logo=cursor&logoColor=white)](cursor://anysphere.cursor-deeplink/mcp/install?name=jcodemunch&config=eyJjb21tYW5kIjogInV2eCIsICJhcmdzIjogWyItLWZyb20iLCAiaHR0cHM6Ly9naXRodWIuY29tL2pncmF2ZWxsZS9qY29kZW11bmNoLW1jcC9yZWxlYXNlcy9kb3dubG9hZC92MS4xMDguMjEvamNvZGVtdW5jaF9tY3AtMS4xMDguMjEtcHkzLW5vbmUtYW55LndobCIsICJqY29kZW11bmNoLW1jcCJdfQ==)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-CLI_install-D97757?style=for-the-badge&logo=anthropic&logoColor=white)](#works-with)
 [![Codex CLI](https://img.shields.io/badge/Codex_CLI-Config_install-10a37f?style=for-the-badge&logo=openai&logoColor=white)](#works-with)
 

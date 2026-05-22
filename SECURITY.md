@@ -86,6 +86,89 @@ Binary files are excluded using a two-stage check:
 
 ---
 
+## Files this server treats as security-sensitive
+
+The following user-writable files participate in the server's trust chain. A
+process that can write any of them can influence the behavior of every
+subsequent MCP session: prompt context the agent sees, tool descriptions, hook
+commands, and which MCP server gets launched. Endpoint-management teams and
+hardened install templates should treat them with the same care as any other
+piece of developer configuration that steers an AI agent.
+
+* `~/.code-index/config.jsonc` — global server configuration. Settings here
+  influence tool tier visibility, language gating, secret-pattern lists, and
+  per-tool description overrides.
+* `~/.code-index/` and everything under it — the symbol index, the
+  optional telemetry SQLite, the bundled-encoder model directory, and the
+  serialized session journal. Bodies cached here are a second copy of every
+  indexed source file.
+* `./.jcodemunch.jsonc` (per-project) — same key shape as the global
+  config, scoped to the directory it lives in. Overrides only those keys
+  it sets.
+* `~/.claude/CLAUDE.md`, `./CLAUDE.md`, `AGENTS.md`,
+  `.cursor/rules/jcodemunch.mdc`, `.windsurfrules` — agent-policy files
+  that `jcodemunch-mcp init` may write or modify, with consent. Each is
+  rendered into the agent's prompt at session start by the corresponding
+  client.
+* `~/.claude/settings.json` (PreToolUse / PostToolUse / PreCompact /
+  TaskCompleted / SubagentStart / WorktreeCreate / WorktreeRemove hooks)
+  — `init` registers hook commands here so Claude Code auto-reindexes
+  after edits and surfaces session diagnostics. The hook commands run
+  every relevant tool call in the host agent.
+* `.github/hooks/hooks.json` — analogous hook surface for GitHub Copilot
+  CLI / cloud agent flows.
+* Generated MCP client config files (paths depend on which clients are
+  installed): `~/Library/Application Support/Claude/claude_desktop_config.json`
+  (macOS Claude Desktop), `%APPDATA%\Claude\claude_desktop_config.json`
+  (Windows Claude Desktop), `~/.cursor/mcp.json`, `~/.continue/config.json`,
+  and the project-scope `.mcp.json` written by `claude mcp add`. Each
+  contains the command line Claude / Cursor / Continue spawn to launch
+  the MCP server.
+
+File-integrity monitoring at the endpoint level (SentinelOne, Tanium, etc.)
+applied to these paths is a reasonable defense-in-depth control in any
+managed-endpoint deployment.
+
+---
+
+## Persistent processes installed by `watch-install`
+
+`jcodemunch-mcp watch-install` registers a login-time service that watches
+indexed directories for filesystem changes and reindexes incrementally. This
+is opt-in and reversible (`watch-uninstall`) but appears in endpoint hunts
+that enumerate startup items, so document it as expected when the service is
+present:
+
+* **Linux (systemd user units):** `~/.config/systemd/user/jcodemunch-watch.service`.
+  Enabled with `systemctl --user enable --now jcodemunch-watch.service`.
+* **macOS (launchd LaunchAgent):**
+  `~/Library/LaunchAgents/us.gravelle.jcodemunch-watch.plist`. Loaded with
+  `launchctl bootstrap gui/$UID <plist>`.
+* **Windows (Task Scheduler entry):** task named `jcodemunch-watch` under
+  the current user, configured to run at logon.
+
+The service runs `jcodemunch-mcp watch-all`, which performs no network I/O
+and only writes back to the per-repo SQLite stores under `~/.code-index/`.
+
+---
+
+## Cache integrity verification modes
+
+`get_symbol_source(verify=True)` hashes the retrieved source and compares
+against the content hash stored in the index. Both values are derived from
+the local cache directory, so the default verification is self-referential:
+a coherent tamper of `~/.code-index/<repo>/` is durably trusted after
+the tamper. Treat the cache directory accordingly — see the security-sensitive
+files section above for why it's worth file-integrity monitoring.
+
+Externally-attested verification (cross-check against the working-tree git
+HEAD) is on the near-term roadmap and will surface as a `verify_against`
+parameter alongside the existing `verify` flag. Until then, the default
+mode is best read as "the cache is internally consistent," not "the cache
+matches the upstream source."
+
+---
+
 ## Telemetry Data Locality
 
 The performance and ranking telemetry introduced in v1.74.0–v1.80.0 is

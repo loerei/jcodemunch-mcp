@@ -220,6 +220,22 @@ The legacy `suppress_meta` per-call parameter still works for backward compatibi
 
 The perf telemetry sink (`telemetry.db`) is **local-only** — it never leaves the machine and contains no source code, only tool names, durations, query strings, and signal flags. Queryable via the `analyze_perf` tool. The ranking ledger (`ranking_events` table) feeds the `tune_weights` tool, which writes per-repo retrieval-weight overrides to `~/.code-index/tuning.jsonc`.
 
+The `share_savings` counter sends only an integer delta and a stable anonymous UUID; it never includes query strings, source code, paths, or repo names. Three durable ways to opt out, in order of robustness for managed environments:
+
+1. Set `"JCODEMUNCH_SHARE_SAVINGS": "0"` in the MCP server env block in `.mcp.json` / `claude_desktop_config.json` (lives in source control, survives any config-file changes).
+2. Run `jcodemunch-mcp init --share-savings=off` or `--no-share-savings`. Writes `"share_savings": false` explicitly into `~/.code-index/config.jsonc`. `config --upgrade` preserves the user-set value across package upgrades.
+3. Edit `~/.code-index/config.jsonc` and add `"share_savings": false`.
+
+### Cross-repo traversal
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `cross_repo_default` | bool | `false` | Default value for the `cross_repo` parameter on `find_importers`, `get_blast_radius`, and `get_dependency_graph`. When `true`, those tools traverse across every separately indexed repository on the machine by default. |
+
+**Data-mingling warning.** With `cross_repo_default: true` (or per-call `cross_repo=true`), a query against a first-party repo can surface results from any third-party / customer / demo repo that has been indexed on the same machine. The features blur the boundary between separately scoped codebases by design — that's the value when you want it (e.g. tracing impact across a multi-repo product) and the risk when you don't (e.g. a docstring from an indexed customer repo leaking into a response about your internal service).
+
+For deployments where first-party and third-party code may both be indexed on the same workstation, leave `cross_repo_default` at `false` and pass `cross_repo=true` only on the specific calls where cross-boundary traversal is intentional. The `JCODEMUNCH_CROSS_REPO_DEFAULT` env var sets the same key for users who can't write config files.
+
 ### Semantic search
 
 Semantic/embedding search is opt-in and requires no config file changes — it is activated entirely through environment variables. All embedding provider vars remain env-var-only (see [Not in config](#not-in-config) below).

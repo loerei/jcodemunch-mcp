@@ -1202,6 +1202,62 @@ def _update_version_field(content: str, version: str, config_path: "Path | None"
     return updated
 
 
+def set_bool_key(content: str, key: str, value: bool) -> str:
+    """Set a boolean key in JSONC config content to an explicit active value.
+
+    Handles three input shapes:
+    - Commented template form:  ``  // "key": true,`` → ``  "key": <value>,``
+    - Existing active form:     ``  "key": false,``   → ``  "key": <value>,``
+    - Key entirely absent:      appended as ``  "key": <value>,`` before the closing brace
+
+    Indent and trailing comma are preserved. The trailing comma is always emitted because
+    JSONC permits it even on the last key in a block.
+
+    The match is anchored on a line where the only non-whitespace content before the key
+    is an optional ``//`` comment marker. Keys nested inside comment paragraphs that happen
+    to contain the text are not touched.
+    """
+    import re
+
+    new_literal = "true" if value else "false"
+    pattern = re.compile(
+        r'^(?P<indent>[ \t]*)(?://[ \t]*)?"' + re.escape(key) + r'"[ \t]*:[ \t]*(?:true|false)[ \t]*,?[ \t]*$',
+        re.MULTILINE,
+    )
+
+    if pattern.search(content):
+        return pattern.sub(rf'\g<indent>"{key}": {new_literal},', content, count=1)
+
+    # Key absent — inject before the closing brace.
+    return _inject_blocks_before_closing_brace(content, [f'  "{key}": {new_literal},'])
+
+
+def apply_share_savings(value: bool, storage_path: "Path | str | None" = None) -> "Path":
+    """Apply an explicit share_savings setting to the user's config.jsonc.
+
+    Creates the config from the current template if it doesn't exist yet, then sets
+    ``share_savings`` to the explicit value. Returns the path written to.
+
+    Used by ``jcodemunch-mcp init --share-savings=on|off`` and
+    ``jcodemunch-mcp install <agent> --share-savings=on|off`` to give users a durable
+    opt-out (or opt-in) lever that survives package upgrades.
+    """
+    if storage_path is None:
+        config_path = _global_config_path()
+    else:
+        config_path = Path(storage_path) / "config.jsonc"
+
+    if not config_path.exists():
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        config_path.write_text(generate_template(), encoding="utf-8")
+
+    content = config_path.read_text(encoding="utf-8")
+    updated = set_bool_key(content, "share_savings", value)
+    if updated != content:
+        config_path.write_text(updated, encoding="utf-8")
+    return config_path
+
+
 def _inject_blocks_before_closing_brace(content: str, blocks: list[str]) -> str:
     """Insert text blocks before the final closing } of a JSONC file.
 
