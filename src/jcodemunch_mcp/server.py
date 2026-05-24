@@ -5665,6 +5665,7 @@ def _generate_claude_md_snippet(missing_only: bool = False) -> str:
         ]),
         ("Runtime Tier Switching", ["set_tool_tier", "announce_model"]),
         ("Self-Guide", ["jcodemunch_guide"]),
+        ("Write Tools", ["smart_patcher"]),
     ]
     from . import __version__ as _ver
     lines = [
