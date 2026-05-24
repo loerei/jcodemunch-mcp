@@ -96,6 +96,8 @@ _CANONICAL_TOOL_NAMES: tuple[str, ...] = (
     "get_redaction_log",
     # Self-guide (force-included; lets one-line CLAUDE.md pull full policy on demand)
     "jcodemunch_guide",
+    # Write tools
+    "smart_patcher",
 )
 
 # --------------------------------------------------------------------------- #
@@ -3336,13 +3338,77 @@ def _build_tools_list() -> list[Tool]:
             },
         ),
     ]
+    # Add smart_patcher conditionally if write is enabled
+    _write_enabled = os.environ.get("JCODEMUNCH_ENABLE_WRITE", "").strip().lower() in ("true", "1", "yes", "on")
+    if _write_enabled:
+        all_tools.append(
+            Tool(
+                name="smart_patcher",
+                description=(
+                    "Highly robust, AST-bounded file editor. Performs constrained search-and-replace "
+                    "on a file, restricted by line ranges or AST symbol boundaries, with deep safety "
+                    "guards against context mismatch."
+                ),
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "targetFile": {
+                            "type": "string",
+                            "description": "Path to the target file to modify (relative to workspace or absolute)."
+                        },
+                        "searchContent": {
+                            "type": "string",
+                            "description": "The exact content to find/replace within the file."
+                        },
+                        "replaceContent": {
+                            "type": "string",
+                            "description": "The new content to replace the search content with."
+                        },
+                        "folderFilter": {
+                            "type": "string",
+                            "description": "Enforce that the target file must reside within this subfolder path."
+                        },
+                        "fileFilter": {
+                            "type": "string",
+                            "description": "Enforce that the target file name must contain this substring."
+                        },
+                        "startLine": {
+                            "type": "integer",
+                            "description": "Scope range start line (1-indexed, inclusive)."
+                        },
+                        "endLine": {
+                            "type": "integer",
+                            "description": "Scope range end line (1-indexed, inclusive)."
+                        },
+                        "symbolName": {
+                            "type": "string",
+                            "description": "AST symbol name scope restriction. Line range will be auto-resolved to this symbol's boundaries."
+                        },
+                        "allowMultiple": {
+                            "type": "boolean",
+                            "description": "Whether to allow replacing multiple identical matches within the scope (default is false)."
+                        },
+                        "lineFilter": {
+                            "type": "string",
+                            "description": "Assert that the matched content starts exactly at this line number (integer) or the target scope contains this substring."
+                        },
+                        "dryRun": {
+                            "type": "boolean",
+                            "description": "If true, proposed changes will be returned as a diff instead of written to the file."
+                        }
+                    },
+                    "required": ["targetFile", "searchContent", "replaceContent"]
+                }
+            )
+        )
+
     # Start with a mutable copy for filtering.
     tools = list(all_tools)
     # --- Profile filtering ---------------------------------------------------
     profile = _effective_profile()
     allowed = _resolve_tier_bundle(profile)
     if allowed is not None:
-        tools = [t for t in tools if t.name in allowed]
+        tools = [t for t in tools if t.name in allowed or t.name == "smart_patcher"]
 
     # Filter out disabled tools. _UNDISABLEABLE_TOOLS (runtime tier controls)
     # are never removed by default — disabling them would lock the user out of
@@ -4729,6 +4795,25 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 "version": _ver,
                 "content": _generate_claude_md_snippet(missing_only=False),
             }
+        elif name == "smart_patcher":
+            from .tools.smart_patcher import smart_patcher
+            result = await asyncio.to_thread(
+                functools.partial(
+                    smart_patcher,
+                    targetFile=arguments["targetFile"],
+                    searchContent=arguments["searchContent"],
+                    replaceContent=arguments["replaceContent"],
+                    folderFilter=arguments.get("folderFilter"),
+                    fileFilter=arguments.get("fileFilter"),
+                    startLine=arguments.get("startLine"),
+                    endLine=arguments.get("endLine"),
+                    symbolName=arguments.get("symbolName"),
+                    allowMultiple=arguments.get("allowMultiple", False),
+                    lineFilter=arguments.get("lineFilter"),
+                    dryRun=arguments.get("dryRun", False),
+                    storage_path=storage_path,
+                )
+            )
         else:
             result = {"error": f"Unknown tool: {name}"}
 
