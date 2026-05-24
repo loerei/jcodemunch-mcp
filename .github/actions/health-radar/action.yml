@@ -40,9 +40,9 @@ runs:
       shell: bash
       run: |
         if [ "${{ inputs.jcodemunch-version }}" = "latest" ]; then
-          pip install -U jcodemunch-mcp
+          pip install -U jcodemunch-mcp || pip install .
         else
-          pip install "jcodemunch-mcp==${{ inputs.jcodemunch-version }}"
+          pip install "jcodemunch-mcp==${{ inputs.jcodemunch-version }}" || pip install .
         fi
         jcodemunch-mcp --version || true
 
