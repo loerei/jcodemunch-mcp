@@ -21,7 +21,7 @@ async def test_server_lists_all_tools():
     try:
         tools = await list_tools()
 
-        assert len(tools) == 81  # +1: list_workspaces (monorepo enumeration, v1.108.0)
+        assert len(tools) == 82  # +1: check_edit_safe
 
         names = {t.name for t in tools}
         expected = {
@@ -37,7 +37,7 @@ async def test_server_lists_all_tools():
             "get_cross_repo_map", "get_group_contracts",
             "get_call_hierarchy", "get_impact_preview",
             "get_dependency_cycles", "get_coupling_metrics", "get_layer_violations",
-            "check_rename_safe", "check_delete_safe", "find_implementations",
+            "check_rename_safe", "check_delete_safe", "check_edit_safe", "find_implementations",
             "get_dead_code_v2", "get_extraction_candidates",
             "plan_refactoring",
             "get_symbol_complexity", "get_churn_rate", "get_hotspots", "get_repo_health",
@@ -672,10 +672,10 @@ async def test_disabled_tools_filtered_from_schema(monkeypatch):
         assert "index_repo" not in tool_names
         assert "search_columns" not in tool_names
         assert "get_file_tree" in tool_names  # Not disabled
-        # 81 default tools + test_summarizer (config cleared) - 2 disabled = 80
+        # 82 default tools + test_summarizer (config cleared) - 2 disabled = 81
         # set_tool_tier + announce_model are undisableable; jcodemunch_guide
         # is in _ALWAYS_PRESENT_TOOLS for tier survival but honors disabled_tools.
-        assert len(tools) == 80
+        assert len(tools) == 81
     finally:
         config_module._GLOBAL_CONFIG.clear()
         config_module._GLOBAL_CONFIG.update(orig_config)
@@ -693,7 +693,7 @@ async def test_disabled_tools_empty_all_tools_present(monkeypatch):
         config_module._GLOBAL_CONFIG["disabled_tools"] = []
 
         tools = await list_tools()
-        assert len(tools) == 82  # 81 + test_summarizer (config cleared, so disabled gate off)
+        assert len(tools) == 83  # 82 + test_summarizer (config cleared, so disabled gate off)
     finally:
         config_module._GLOBAL_CONFIG.clear()
         config_module._GLOBAL_CONFIG.update(orig_config)
