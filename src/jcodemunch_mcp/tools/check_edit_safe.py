@@ -45,29 +45,35 @@ def _check_importers_impact(
             cross_repo=cross_repo, storage_path=storage_path,
         )
         importers_list = outcome.get("importers", []) or []
-        for imp in importers_list:
-            if imp.get("cross_repo"):
-                cross_repos += 1
-                blockers.append({
-                    "kind": "cross_repo_import",
-                    "repo": imp.get("source_repo", ""),
-                    "file": imp.get("file", ""),
-                    "severity": 4,
-                    "info": "detected via cross-repository static mapping",
-                })
+
+        # 1. Process cross-repo importers separately to break syntactic duplication pattern
+        cross_repo_list = [imp for imp in importers_list if imp.get("cross_repo")]
+        cross_repos = len(cross_repo_list)
+        for imp in cross_repo_list:
+            blockers.append({
+                "kind": "cross_repo_import",
+                "repo": imp.get("source_repo", ""),
+                "file": imp.get("file", ""),
+                "severity": 4,
+                "info": "detected via cross-repository static mapping",
+            })
+
+        # 2. Process local importers sequentially
+        local_list = [imp for imp in importers_list if not imp.get("cross_repo")]
+        for imp in local_list:
+            f_path = imp.get("file", "")
+            if not f_path or f_path == target_file:
+                continue
+            if is_test_file(f_path):
+                test_imports += 1
             else:
-                f_path = imp.get("file", "")
-                if f_path and f_path != target_file:
-                    if is_test_file(f_path):
-                        test_imports += 1
-                    else:
-                        ext_imports += 1
-                        blockers.append({
-                            "kind": "external_import",
-                            "file": f_path,
-                            "severity": 3,
-                            "info": "direct external dependency in source tree",
-                        })
+                ext_imports += 1
+                blockers.append({
+                    "kind": "external_import",
+                    "file": f_path,
+                    "severity": 3,
+                    "info": "direct external dependency in source tree",
+                })
     except Exception as exc:  # noqa: BLE001
         logger.warning("Importer signals evaluation skipped due to: %s", exc)
 
@@ -166,6 +172,39 @@ def _check_complexity_and_coverage(
         })
 
 
+def _determine_verdict_and_confidence(
+    runtime_hits: Optional[int],
+    cross_repo_count: int,
+    external_import_count: int,
+    cyclomatic: int,
+    total_external_callers: int,
+    has_test_coverage: bool,
+) -> tuple[str, float]:
+    """Helper to compute verdict and confidence rating to control cognitive complexity."""
+    if runtime_hits and runtime_hits > 0:
+        verdict = "runtime_observed_critical"
+    elif cross_repo_count > 0 or external_import_count > 0:
+        verdict = "signature_impact_risky"
+    elif cyclomatic > 10:
+        verdict = "complexity_risky"
+    elif total_external_callers > 0 and not has_test_coverage:
+        verdict = "no_test_coverage_risky"
+    else:
+        verdict = "safe_to_edit"
+
+    confidence = 0.95
+    if verdict == "signature_impact_risky":
+        confidence = 0.60
+    elif verdict == "complexity_risky":
+        confidence = 0.70
+    elif verdict == "no_test_coverage_risky":
+        confidence = 0.75
+    elif verdict == "runtime_observed_critical":
+        confidence = 0.30
+
+    return verdict, confidence
+
+
 def check_edit_safe(
     repo: str,
     symbol: str,
@@ -224,26 +263,14 @@ def check_edit_safe(
         })
 
     # ── Verdict ──
-    if runtime_hits and runtime_hits > 0:
-        verdict = "runtime_observed_critical"
-    elif cross_repo_count > 0 or external_import_count > 0:
-        verdict = "signature_impact_risky"
-    elif cyclomatic > 10:
-        verdict = "complexity_risky"
-    elif total_external_callers > 0 and not has_test_coverage:
-        verdict = "no_test_coverage_risky"
-    else:
-        verdict = "safe_to_edit"
-
-    confidence = 0.95
-    if verdict == "signature_impact_risky":
-        confidence = 0.60
-    elif verdict == "complexity_risky":
-        confidence = 0.70
-    elif verdict == "no_test_coverage_risky":
-        confidence = 0.75
-    elif verdict == "runtime_observed_critical":
-        confidence = 0.30
+    verdict, confidence = _determine_verdict_and_confidence(
+        runtime_hits,
+        cross_repo_count,
+        external_import_count,
+        cyclomatic,
+        total_external_callers,
+        has_test_coverage,
+    )
 
     actions = {
         "safe_to_edit": "Code is isolated or simple. Safe to proceed with local edits.",
