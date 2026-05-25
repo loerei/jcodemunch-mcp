@@ -77,8 +77,6 @@ def create_custom_index(tmp_path: Path, files: dict) -> tuple[str, str]:
     result = index_folder(str(tmp_path), use_ai_summaries=False, storage_path=storage)
     repo_id = result.get("repo", str(tmp_path))
     return repo_id, storage
-
-
 SAFE_REPO_FIXTURE = {
     "used.py": (
         "def used_func():\n"
@@ -94,4 +92,3 @@ SAFE_REPO_FIXTURE = {
         "    return used_func() + 1\n"
     ),
 }
-

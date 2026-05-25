@@ -4800,17 +4800,17 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             result = await asyncio.to_thread(
                 functools.partial(
                     smart_patcher,
-                    targetFile=arguments["targetFile"],
-                    searchContent=arguments["searchContent"],
-                    replaceContent=arguments["replaceContent"],
-                    folderFilter=arguments.get("folderFilter"),
-                    fileFilter=arguments.get("fileFilter"),
-                    startLine=arguments.get("startLine"),
-                    endLine=arguments.get("endLine"),
-                    symbolName=arguments.get("symbolName"),
-                    allowMultiple=arguments.get("allowMultiple", False),
-                    lineFilter=arguments.get("lineFilter"),
-                    dryRun=arguments.get("dryRun", False),
+                    target_file=arguments["targetFile"],
+                    search_content=arguments["searchContent"],
+                    replace_content=arguments["replaceContent"],
+                    folder_filter=arguments.get("folderFilter"),
+                    file_filter=arguments.get("fileFilter"),
+                    start_line=arguments.get("startLine"),
+                    end_line=arguments.get("endLine"),
+                    symbol_name=arguments.get("symbolName"),
+                    allow_multiple=arguments.get("allowMultiple", False),
+                    line_filter=arguments.get("lineFilter"),
+                    dry_run=arguments.get("dryRun", False),
                     storage_path=storage_path,
                 )
             )

@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Optional, Union
 
 from ..storage import IndexStore
-from ._utils import resolve_repo
+from ..security import validate_path
 
 
 def generate_diff(original: str, modified: str, filename: str) -> str:
@@ -24,33 +24,111 @@ def generate_diff(original: str, modified: str, filename: str) -> str:
     return "".join(diff)
 
 
+def _resolve_ast_boundaries(
+    cwd: Path,
+    target_path: Path,
+    symbol_name: Optional[str],
+    storage_path: Optional[str],
+    start_line: Optional[int],
+    end_line: Optional[int],
+) -> tuple[Optional[int], Optional[int], Optional[dict]]:
+    """Resolve start and end lines for AST symbolName boundary."""
+    if not symbol_name:
+        return start_line, end_line, None
+
+    try:
+        from .resolve_repo import resolve_repo as resolve_repo_fn
+        repo_res = resolve_repo_fn(str(cwd), storage_path)
+        if not repo_res.get("found"):
+            return None, None, {"error": f"Workspace at '{cwd}' is not indexed. Call index_folder first to resolve symbols."}
+        
+        repo_id = repo_res["repo"]
+        owner, name = repo_id.split("/", 1)
+        
+        store = IndexStore(base_path=storage_path)
+        index = store.load_index(owner, name)
+        if not index:
+            return None, None, {"error": f"Index for '{repo_id}' could not be loaded."}
+            
+        source_root = Path(repo_res.get("source_root") or index.source_root or cwd).resolve()
+        try:
+            rel_file_path = str(target_path.relative_to(source_root)).replace("\\", "/")
+        except ValueError:
+            rel_file_path = str(target_path.relative_to(cwd)).replace("\\", "/")
+            
+        matched_symbols = []
+        for sym in index.symbols:
+            if sym.get("name") == symbol_name and sym.get("file") == rel_file_path:
+                matched_symbols.append(sym)
+                
+        if not matched_symbols:
+            return None, None, {"error": f"Symbol '{symbol_name}' not found in file '{rel_file_path}'."}
+            
+        symbol = matched_symbols[0]
+        return symbol["line"], symbol["end_line"], None
+    except Exception as e:
+        return None, None, {"error": f"Error resolving symbolName '{symbol_name}': {e}"}
+
+
+def _apply_line_filters(
+    target_slice: str,
+    norm_search: str,
+    start_idx: int,
+    line_filter: Optional[Union[str, int]],
+) -> Optional[dict]:
+    """Assert lineFilter substring or numeric line index checks."""
+    if line_filter is None:
+        return None
+
+    is_numeric = False
+    try:
+        assert_line_num = int(line_filter)
+        is_numeric = True
+    except (ValueError, TypeError):
+        pass
+
+    if is_numeric:
+        match_index = target_slice.find(norm_search)
+        before_match = target_slice[:match_index]
+        lines_before_match = before_match.count("\n")
+        actual_start_line = start_idx + 1 + lines_before_match
+        if actual_start_line != assert_line_num:
+            return {
+                "error": f"Error: lineFilter assertion failed! The search content starts at line {actual_start_line}, but lineFilter asserted line {assert_line_num}."
+            }
+    else:
+        if str(line_filter) not in target_slice:
+            return {
+                "error": f"Error: lineFilter assertion failed! The target scope does not contain the substring '{line_filter}'."
+            }
+    return None
+
+
 def smart_patcher(
-    targetFile: str,
-    searchContent: str,
-    replaceContent: str,
-    folderFilter: Optional[str] = None,
-    fileFilter: Optional[str] = None,
-    startLine: Optional[int] = None,
-    endLine: Optional[int] = None,
-    symbolName: Optional[str] = None,
-    allowMultiple: bool = False,
-    lineFilter: Optional[Union[str, int]] = None,
-    dryRun: bool = False,
+    target_file: str,
+    search_content: str,
+    replace_content: str,
+    folder_filter: Optional[str] = None,
+    file_filter: Optional[str] = None,
+    start_line: Optional[int] = None,
+    end_line: Optional[int] = None,
+    symbol_name: Optional[str] = None,
+    allow_multiple: bool = False,
+    line_filter: Optional[Union[str, int]] = None,
+    dry_run: bool = False,
     storage_path: Optional[str] = None,
 ) -> dict:
     """Perform a robust search-and-replace, optionally constrained to an AST symbol or line range."""
     cwd = Path.cwd().resolve()
-    target_path = Path(targetFile).resolve()
+    target_path = Path(target_file).resolve()
 
-    # --- Context Mismatch Guard ---
-    try:
-        target_path.relative_to(cwd)
-    except ValueError:
+    # --- Context Mismatch Guard & Blocker Path Traversal Protection ---
+    if not validate_path(cwd, target_path) or os.path.commonpath([str(cwd), str(target_path)]) != str(cwd):
         return {
             "error": "fatal_context_mismatch",
             "detail": (
                 f"[FATAL CONTEXT MISMATCH]\n"
-                f"Target file '{targetFile}' is outside the active MCP workspace '{cwd}'.\n\n"
+                f"Target file '{target_file}' is outside the active MCP workspace '{cwd}'.\n\n"
                 "To prevent destructive out-of-sync executions:\n"
                 "1. Make sure your active workspace matches the target repository.\n"
                 "2. Ensure the terminal shell is CD'ed to the target repository.\n"
@@ -58,17 +136,17 @@ def smart_patcher(
         }
 
     # --- Filter Checks ---
-    if folderFilter:
-        resolved_folder = (cwd / folderFilter).resolve()
+    if folder_filter:
+        resolved_folder = (cwd / folder_filter).resolve()
         try:
             target_path.relative_to(resolved_folder)
         except ValueError:
-            return {"error": f"Target file '{targetFile}' does not reside inside folderFilter '{folderFilter}'"}
+            return {"error": f"Target file '{target_file}' does not reside inside folder_filter '{folder_filter}'"}
 
-    if fileFilter:
+    if file_filter:
         file_name = target_path.name
-        if fileFilter not in file_name:
-            return {"error": f"Target file name '{file_name}' does not match fileFilter '{fileFilter}'"}
+        if file_filter not in file_name:
+            return {"error": f"Target file name '{file_name}' does not match file_filter '{file_filter}'"}
 
     if not target_path.exists():
         return {"error": f"Target file not found at {target_path}"}
@@ -81,51 +159,17 @@ def smart_patcher(
 
     is_crlf = "\r\n" in file_content
     norm_file = file_content.replace("\r\n", "\n")
-    norm_search = searchContent.replace("\r\n", "\n")
-    norm_replace = replaceContent.replace("\r\n", "\n")
+    norm_search = search_content.replace("\r\n", "\n")
+    norm_replace = replace_content.replace("\r\n", "\n")
 
     file_lines = norm_file.split("\n")
 
     # --- Boundary Resolution ---
-    resolved_start_line = startLine
-    resolved_end_line = endLine
-
-    if symbolName:
-        try:
-            from .resolve_repo import resolve_repo as resolve_repo_fn
-            repo_res = resolve_repo_fn(str(cwd), storage_path)
-            if not repo_res.get("found"):
-                return {"error": f"Workspace at '{cwd}' is not indexed. Call index_folder first to resolve symbols."}
-            
-            repo_id = repo_res["repo"]
-            owner, name = repo_id.split("/", 1)
-            
-            store = IndexStore(base_path=storage_path)
-            index = store.load_index(owner, name)
-            if not index:
-                return {"error": f"Index for '{repo_id}' could not be loaded."}
-                
-            # Get relative path of target_file within the source_root
-            source_root = Path(repo_res.get("source_root") or index.source_root or cwd).resolve()
-            try:
-                rel_file_path = str(target_path.relative_to(source_root)).replace("\\", "/")
-            except ValueError:
-                rel_file_path = str(target_path.relative_to(cwd)).replace("\\", "/")
-                
-            # Find symbol in index
-            matched_symbols = []
-            for sym in index.symbols:
-                if sym.get("name") == symbolName and sym.get("file") == rel_file_path:
-                    matched_symbols.append(sym)
-                    
-            if not matched_symbols:
-                return {"error": f"Symbol '{symbolName}' not found in file '{rel_file_path}'."}
-                
-            symbol = matched_symbols[0]
-            resolved_start_line = symbol["line"]
-            resolved_end_line = symbol["end_line"]
-        except Exception as e:
-            return {"error": f"Error resolving symbolName '{symbolName}': {e}"}
+    resolved_start_line, resolved_end_line, err = _resolve_ast_boundaries(
+        cwd, target_path, symbol_name, storage_path, start_line, end_line
+    )
+    if err:
+        return err
 
     # Determine line boundaries (1-indexed inclusive to 0-indexed slice)
     start_idx = (resolved_start_line - 1) if resolved_start_line is not None else 0
@@ -142,41 +186,22 @@ def smart_patcher(
     if occurrences == 0:
         first_lines = "\n".join(norm_search.split("\n")[:3])
         err_msg = f"Error: Search content not found inside the specified scope (lines {start_idx + 1} to {end_idx + 1})!\nFirst 3 lines of search block:\n{first_lines}"
-        if symbolName:
-            err_msg += f"\nAST Scope: Symbol '{symbolName}' at lines {start_idx + 1}-{end_idx + 1}"
+        if symbol_name:
+            err_msg += f"\nAST Scope: Symbol '{symbol_name}' at lines {start_idx + 1}-{end_idx + 1}"
         return {"error": err_msg}
 
-    if not allowMultiple and occurrences > 1:
+    if not allow_multiple and occurrences > 1:
         return {
             "error": (
                 f"Error: Search content occurs {occurrences} times within the specified scope (lines {start_idx + 1} to {end_idx + 1}). "
-                "To replace all, set 'allowMultiple: true'."
+                "To replace all, set 'allow_multiple: true'."
             )
         }
 
     # --- Line Filter Assertion ---
-    if lineFilter is not None:
-        is_numeric = False
-        try:
-            assert_line_num = int(lineFilter)
-            is_numeric = True
-        except (ValueError, TypeError):
-            pass
-
-        if is_numeric:
-            match_index = target_slice.find(norm_search)
-            before_match = target_slice[:match_index]
-            lines_before_match = before_match.count("\n")
-            actual_start_line = start_idx + 1 + lines_before_match
-            if actual_start_line != assert_line_num:
-                return {
-                    "error": f"Error: lineFilter assertion failed! The search content starts at line {actual_start_line}, but lineFilter asserted line {assert_line_num}."
-                }
-        else:
-            if str(lineFilter) not in target_slice:
-                return {
-                    "error": f"Error: lineFilter assertion failed! The target scope does not contain the substring '{lineFilter}'."
-                }
+    err = _apply_line_filters(target_slice, norm_search, start_idx, line_filter)
+    if err:
+        return err
 
     # Apply replacement
     patched_slice = target_slice.replace(norm_search, norm_replace)
@@ -188,14 +213,14 @@ def smart_patcher(
     if is_crlf:
         patched_file = patched_file.replace("\n", "\r\n")
 
-    if dryRun:
-        diff_text = generate_diff(file_content, patched_file, targetFile)
+    if dry_run:
+        diff_text = generate_diff(file_content, patched_file, target_file)
         output = f"🔍 **[DRY RUN] Diff for patch proposal:**\n\n```diff\n{diff_text}```\n"
-        output += f"- Target file: `{targetFile}`\n"
+        output += f"- Target file: `{target_file}`\n"
         output += f"- Match occurrences inside scope: **{occurrences}**\n"
-        if symbolName:
-            output += f"- Scope: AST symbol `{symbolName}` (lines {start_idx + 1}-{end_idx + 1})\n"
-        elif startLine or endLine:
+        if symbol_name:
+            output += f"- Scope: AST symbol `{symbol_name}` (lines {start_idx + 1}-{end_idx + 1})\n"
+        elif start_line or end_line:
             output += f"- Scope: Line range {start_idx + 1}-{end_idx + 1}\n"
 
         return {
@@ -212,11 +237,11 @@ def smart_patcher(
         return {"error": f"Failed to write patched file: {e}"}
 
     output = f"✅ **File patched successfully!**\n"
-    output += f"- Target file: `{targetFile}`\n"
+    output += f"- Target file: `{target_file}`\n"
     output += f"- Replaced occurrences: **{occurrences}**\n"
-    if symbolName:
-        output += f"- Scope: AST symbol `{symbolName}` (lines {start_idx + 1}-{end_idx + 1})\n"
-    elif startLine or endLine:
+    if symbol_name:
+        output += f"- Scope: AST symbol `{symbol_name}` (lines {start_idx + 1}-{end_idx + 1})\n"
+    elif start_line or end_line:
         output += f"- Scope: Line range {start_idx + 1}-{end_idx + 1}\n"
     if occurrences > 1:
         output += f"⚠️ *Warning:* Replaced {occurrences} identical occurrences.\n"
