@@ -59,7 +59,7 @@ _CANONICAL_TOOL_NAMES: tuple[str, ...] = (
     "get_dependency_graph", "get_class_hierarchy", "get_related_symbols",
     "get_call_hierarchy",
     # Impact & Safety
-    "get_blast_radius", "check_rename_safe", "check_delete_safe",
+    "get_blast_radius", "check_rename_safe", "check_delete_safe", "check_edit_safe",
     "get_impact_preview", "get_changed_symbols", "plan_refactoring",
     "get_symbol_provenance", "get_pr_risk_profile",
     # Symbol navigation
@@ -127,7 +127,7 @@ _TOOL_TIER_STANDARD: frozenset[str] = _TOOL_TIER_CORE | frozenset({
     "check_references", "get_dependency_graph",
     "get_class_hierarchy", "get_related_symbols", "get_call_hierarchy",
     # Impact & Safety
-    "get_blast_radius", "check_rename_safe", "check_delete_safe",
+    "get_blast_radius", "check_rename_safe", "check_delete_safe", "check_edit_safe",
     "get_impact_preview", "get_changed_symbols", "get_symbol_diff",
     "get_symbol_provenance", "get_pr_risk_profile",
     # Symbol navigation
@@ -2209,6 +2209,37 @@ def _build_tools_list() -> list[Tool]:
                     "symbol": {
                         "type": "string",
                         "description": "Symbol ID or name to evaluate for deletion safety.",
+                    },
+                    "cross_repo": {
+                        "type": "boolean",
+                        "description": "Include other indexed repos in the analysis (default true).",
+                        "default": True,
+                    },
+                    "include_runtime": {
+                        "type": "boolean",
+                        "description": "Consult runtime_calls for production evidence (default true).",
+                        "default": True,
+                    },
+                },
+                "required": ["repo", "symbol"],
+            },
+        ),
+        Tool(
+            name="check_edit_safe",
+            description=(
+                "Composite preflight: can this symbol be edited safely? Combines check_references, "
+                "find_importers (cross-repo), complexity analysis, test coverage verification, and "
+                "runtime execution traffic into a single verdict + one-line recommended_action. "
+                "Verdict tiers: safe_to_edit / signature_impact_risky / complexity_risky / "
+                "no_test_coverage_risky / runtime_observed_critical. Read-only — never mutates the codebase."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "repo": {"type": "string", "description": "Repository identifier"},
+                    "symbol": {
+                        "type": "string",
+                        "description": "Symbol ID or name to evaluate for edit safety.",
                     },
                     "cross_repo": {
                         "type": "boolean",
@@ -4326,6 +4357,18 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                     storage_path=storage_path,
                 )
             )
+        elif name == "check_edit_safe":
+            from .tools.check_edit_safe import check_edit_safe
+            result = await asyncio.to_thread(
+                functools.partial(
+                    check_edit_safe,
+                    repo=arguments["repo"],
+                    symbol=arguments["symbol"],
+                    cross_repo=arguments.get("cross_repo", True),
+                    include_runtime=arguments.get("include_runtime", True),
+                    storage_path=storage_path,
+                )
+            )
         elif name == "find_implementations":
             from .tools.find_implementations import find_implementations
             result = await asyncio.to_thread(
@@ -5509,7 +5552,7 @@ def _generate_claude_md_snippet(missing_only: bool = False) -> str:
                            "get_dependency_graph", "get_class_hierarchy",
                            "get_related_symbols", "get_call_hierarchy",
                            "find_implementations"]),
-        ("Impact & Safety", ["get_blast_radius", "check_rename_safe", "check_delete_safe",
+        ("Impact & Safety", ["get_blast_radius", "check_rename_safe", "check_delete_safe", "check_edit_safe",
                               "get_impact_preview", "get_changed_symbols",
                               "plan_refactoring", "get_symbol_provenance",
                               "get_pr_risk_profile"]),

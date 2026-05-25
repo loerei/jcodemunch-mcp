@@ -139,3 +139,51 @@ def resolve_fqn(
     if not resolved:
         return None, f"FQN '{fqn}' could not be resolved. File not in index or namespace mismatch."
     return resolved, None
+
+
+import re
+_TEST_FILE_RE = re.compile(r"(^|[/\\])(test_|tests?[/\\]|_test\.|conftest\.py)", re.IGNORECASE)
+
+
+def is_test_file(file_path: str) -> bool:
+    """Identify if a file path belongs to a test suite."""
+    return bool(_TEST_FILE_RE.search(file_path or ""))
+
+
+def resolve_target_symbol(index, symbol: str) -> Optional[dict]:
+    """Resolve a symbol ID or name to one symbol dictionary."""
+    for sym in index.symbols:
+        if sym.get("id") == symbol:
+            return sym
+    candidates = [s for s in index.symbols if s.get("name") == symbol]
+    if not candidates:
+        return None
+    # Prefer non-import kinds with the largest body
+    candidates.sort(key=lambda s: (
+        s.get("kind") == "import",
+        -int(s.get("byte_length", 0) or 0),
+    ))
+    return candidates[0]
+
+
+def get_symbol_runtime_hits(store: IndexStore, owner: str, name: str, symbol_id: str, tool_name: str = "tool") -> Optional[int]:
+    """Retrieve cumulative runtime hit count for a symbol from sqlite trace storage."""
+    try:
+        import sqlite3  # noqa: PLC0415
+        db_path = store._sqlite._db_path(owner, name)
+        if not db_path.exists():
+            return None
+        conn = sqlite3.connect(f"file:{db_path}?mode=ro&immutable=1", uri=True)
+        try:
+            cur = conn.execute(
+                "SELECT COALESCE(SUM(hit_count), 0) FROM runtime_calls WHERE symbol_id = ?",
+                (symbol_id,),
+            )
+            row = cur.fetchone()
+            return int(row[0]) if row and row[0] else None
+        finally:
+            conn.close()
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("%s: runtime hits skipped: %s", tool_name, exc, exc_info=True)
+        return None
+
