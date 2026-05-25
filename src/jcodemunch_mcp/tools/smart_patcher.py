@@ -104,6 +104,64 @@ def _apply_line_filters(
     return None
 
 
+def _read_file_and_check_filters(
+    target_path: Path,
+    cwd: Path,
+    folder_filter: Optional[str],
+    file_filter: Optional[str],
+) -> tuple[Optional[str], Optional[dict]]:
+    """Verify filters and read the original file content."""
+    if folder_filter:
+        resolved_folder = (cwd / folder_filter).resolve()
+        try:
+            target_path.relative_to(resolved_folder)
+        except ValueError:
+            return None, {"error": f"Target file does not reside inside folder_filter '{folder_filter}'"}
+
+    if file_filter:
+        file_name = target_path.name
+        if file_filter not in file_name:
+            return None, {"error": f"Target file name '{file_name}' does not match file_filter '{file_filter}'"}
+
+    if not target_path.exists():
+        return None, {"error": f"Target file not found at {target_path}"}
+
+    try:
+        return target_path.read_text(encoding="utf-8", errors="replace"), None
+    except Exception as e:
+        return None, {"error": f"Failed to read file: {e}"}
+
+
+def _slice_and_check_occurrences(
+    file_lines: list[str],
+    start_idx: int,
+    end_idx: int,
+    norm_search: str,
+    allow_multiple: bool,
+    symbol_name: Optional[str],
+) -> tuple[Optional[str], Optional[dict]]:
+    """Slice target content and verify occurrence counts within scope."""
+    target_slice = "\n".join(file_lines[start_idx:end_idx + 1])
+    occurrences = target_slice.count(norm_search)
+
+    if occurrences == 0:
+        first_lines = "\n".join(norm_search.split("\n")[:3])
+        err_msg = f"Error: Search content not found inside the specified scope (lines {start_idx + 1} to {end_idx + 1})!\nFirst 3 lines of search block:\n{first_lines}"
+        if symbol_name:
+            err_msg += f"\nAST Scope: Symbol '{symbol_name}' at lines {start_idx + 1}-{end_idx + 1}"
+        return None, {"error": err_msg}
+
+    if not allow_multiple and occurrences > 1:
+        return None, {
+            "error": (
+                f"Error: Search content occurs {occurrences} times within the specified scope (lines {start_idx + 1} to {end_idx + 1}). "
+                "To replace all, set 'allow_multiple: true'."
+            )
+        }
+
+    return target_slice, None
+
+
 def _smart_patcher_impl(
     target_file: str,
     search_content: str,
@@ -123,39 +181,18 @@ def _smart_patcher_impl(
     base_dir = os.path.abspath(cwd)
 
     # --- Context Mismatch Guard & Blocker Path Traversal Protection ---
-    # 1. Resolve absolute path of target_file to prevent traversal
-    target_abs_path = os.path.abspath(target_file) if os.path.isabs(target_file) else os.path.abspath(os.path.join(base_dir, target_file))
-
-    # 2. Assert path boundary safely (dual check for SonarQube pattern-matching + runtime safety)
-    if not target_abs_path.startswith(base_dir):
+    resolved_path = os.path.abspath(os.path.join(base_dir, target_file))
+    if not resolved_path.startswith(base_dir):
         raise ValueError("fatal_context_mismatch")
-    if not target_abs_path.startswith(base_dir + os.sep) and target_abs_path != base_dir:
+    if not resolved_path.startswith(base_dir + os.sep) and resolved_path != base_dir:
         raise ValueError("fatal_context_mismatch")
 
-    # 3. Construct Path object from the safe absolute path
-    target_path = Path(target_abs_path)
+    target_path = Path(resolved_path)
 
-    # --- Filter Checks ---
-    if folder_filter:
-        resolved_folder = (cwd / folder_filter).resolve()
-        try:
-            target_path.relative_to(resolved_folder)
-        except ValueError:
-            return {"error": f"Target file '{target_file}' does not reside inside folder_filter '{folder_filter}'"}
-
-    if file_filter:
-        file_name = target_path.name
-        if file_filter not in file_name:
-            return {"error": f"Target file name '{file_name}' does not match file_filter '{file_filter}'"}
-
-    if not target_path.exists():
-        return {"error": f"Target file not found at {target_path}"}
-
-    # --- Read original content ---
-    try:
-        file_content = target_path.read_text(encoding="utf-8", errors="replace")
-    except Exception as e:
-        return {"error": f"Failed to read file: {e}"}
+    # --- Filter Checks & File Read ---
+    file_content, err = _read_file_and_check_filters(target_path, cwd, folder_filter, file_filter)
+    if err:
+        return err
 
     is_crlf = "\r\n" in file_content
     norm_file = file_content.replace("\r\n", "\n")
@@ -178,25 +215,14 @@ def _smart_patcher_impl(
     start_idx = max(0, min(start_idx, len(file_lines) - 1))
     end_idx = max(start_idx, min(end_idx, len(file_lines) - 1))
 
-    # Slice target content inside scope boundary
-    target_slice = "\n".join(file_lines[start_idx:end_idx + 1])
+    # Slice target content inside scope boundary and verify occurrences
+    target_slice, err = _slice_and_check_occurrences(
+        file_lines, start_idx, end_idx, norm_search, allow_multiple, symbol_name
+    )
+    if err:
+        return err
 
-    # Occurrences check
     occurrences = target_slice.count(norm_search)
-    if occurrences == 0:
-        first_lines = "\n".join(norm_search.split("\n")[:3])
-        err_msg = f"Error: Search content not found inside the specified scope (lines {start_idx + 1} to {end_idx + 1})!\nFirst 3 lines of search block:\n{first_lines}"
-        if symbol_name:
-            err_msg += f"\nAST Scope: Symbol '{symbol_name}' at lines {start_idx + 1}-{end_idx + 1}"
-        return {"error": err_msg}
-
-    if not allow_multiple and occurrences > 1:
-        return {
-            "error": (
-                f"Error: Search content occurs {occurrences} times within the specified scope (lines {start_idx + 1} to {end_idx + 1}). "
-                "To replace all, set 'allow_multiple: true'."
-            )
-        }
 
     # --- Line Filter Assertion ---
     err = _apply_line_filters(target_slice, norm_search, start_idx, line_filter)
@@ -270,8 +296,17 @@ def smart_patcher(
 ) -> dict:
     """Perform a robust search-and-replace, optionally constrained to an AST symbol or line range."""
     try:
+        # Path validation at the entry point to satisfy static taint-analysis engines
+        cwd = Path.cwd().resolve()
+        base_dir = os.path.abspath(cwd)
+        resolved_path = os.path.abspath(os.path.join(base_dir, target_file))
+        if not resolved_path.startswith(base_dir):
+            raise ValueError("fatal_context_mismatch")
+        if not resolved_path.startswith(base_dir + os.sep) and resolved_path != base_dir:
+            raise ValueError("fatal_context_mismatch")
+
         return _smart_patcher_impl(
-            target_file=target_file,
+            target_file=resolved_path,
             search_content=search_content,
             replace_content=replace_content,
             folder_filter=folder_filter,
