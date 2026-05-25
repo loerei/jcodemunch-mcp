@@ -179,6 +179,14 @@ def _smart_patcher_impl(
     """Internal implementation of smart_patcher."""
     cwd = Path.cwd().resolve()
     base_dir = os.path.abspath(cwd)
+    try:
+        from .resolve_repo import resolve_repo as resolve_repo_fn
+        temp_resolved = os.path.abspath(os.path.join(base_dir, target_file))
+        repo_res = resolve_repo_fn(temp_resolved, storage_path)
+        if repo_res.get("found") and "source_root" in repo_res:
+            base_dir = os.path.abspath(repo_res["source_root"])
+    except Exception:
+        pass
 
     # --- Context Mismatch Guard & Blocker Path Traversal Protection ---
     resolved_path = os.path.abspath(os.path.join(base_dir, target_file))
@@ -299,6 +307,15 @@ def smart_patcher(
         # Path validation at the entry point to satisfy static taint-analysis engines
         cwd = Path.cwd().resolve()
         base_dir = os.path.abspath(cwd)
+        try:
+            from .resolve_repo import resolve_repo as resolve_repo_fn
+            temp_resolved = os.path.abspath(os.path.join(base_dir, target_file))
+            repo_res = resolve_repo_fn(temp_resolved, storage_path)
+            if repo_res.get("found") and "source_root" in repo_res:
+                base_dir = os.path.abspath(repo_res["source_root"])
+        except Exception:
+            pass
+
         resolved_path = os.path.abspath(os.path.join(base_dir, target_file))
         if not resolved_path.startswith(base_dir):
             raise ValueError("fatal_context_mismatch")

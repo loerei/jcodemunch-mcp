@@ -246,3 +246,32 @@ class TestSmartPatcher:
             "other_val = 'dup'\n"
         )
         assert app_file.read_text() == expected_content
+
+    def test_external_workspace_indexed_repo(self, tmp_path, monkeypatch):
+        """smart_patcher must allow editing files inside an indexed repo even if CWD is outside."""
+        # Set CWD to an external directory (simulating AppData programs directory)
+        external_cwd = tmp_path / "appdata_cwd"
+        external_cwd.mkdir()
+        monkeypatch.chdir(external_cwd)
+
+        # Create a workspace directory and index it
+        workspace_dir = tmp_path / "workspace"
+        workspace_dir.mkdir()
+        app_file = workspace_dir / "app.py"
+        app_file.write_text("print('hello')\n")
+
+        store_path = str(tmp_path / "store")
+        index_folder(str(workspace_dir), use_ai_summaries=False, storage_path=store_path, identity_mode="local")
+
+        # Call smart_patcher with absolute path of target file (which is under indexed workspace_dir)
+        res = smart_patcher(
+            target_file=str(app_file),
+            search_content="hello",
+            replace_content="world",
+            dry_run=False,
+            storage_path=store_path
+        )
+
+        assert "success" in res
+        assert res["success"] is True
+        assert app_file.read_text() == "print('world')\n"
