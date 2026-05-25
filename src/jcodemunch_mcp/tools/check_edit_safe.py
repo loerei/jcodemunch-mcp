@@ -13,53 +13,16 @@ import time
 from typing import Optional
 
 from ..storage import IndexStore, record_savings, estimate_savings, cost_avoided
-from ._utils import load_repo_index_or_error, resolve_repo
+from ._utils import (
+    load_repo_index_or_error,
+    resolve_repo,
+    is_test_file,
+    resolve_target_symbol,
+    get_symbol_runtime_hits,
+)
 
 logger = logging.getLogger(__name__)
 
-_TEST_FILE_RE = re.compile(r"(^|[/\\])(test_|tests?[/\\]|_test\.|conftest\.py)", re.IGNORECASE)
-
-
-def _is_test_file(file_path: str) -> bool:
-    return bool(_TEST_FILE_RE.search(file_path or ""))
-
-
-def _resolve_target(index, symbol: str) -> Optional[dict]:
-    """Resolve a symbol id or name to one symbol dict."""
-    for sym in index.symbols:
-        if sym.get("id") == symbol:
-            return sym
-    candidates = [s for s in index.symbols if s.get("name") == symbol]
-    if not candidates:
-        return None
-    # Prefer non-import kinds with the largest body
-    candidates.sort(key=lambda s: (
-        s.get("kind") == "import",
-        -int(s.get("byte_length", 0) or 0),
-    ))
-    return candidates[0]
-
-
-def _runtime_hits(store: IndexStore, owner: str, name: str, symbol_id: str) -> Optional[int]:
-    """Best-effort runtime hit count over the indexed trace window."""
-    try:
-        import sqlite3  # noqa: PLC0415
-        db_path = store._sqlite._db_path(owner, name)
-        if not db_path.exists():
-            return None
-        conn = sqlite3.connect(f"file:{db_path}?mode=ro&immutable=1", uri=True)
-        try:
-            cur = conn.execute(
-                "SELECT COALESCE(SUM(hit_count), 0) FROM runtime_calls WHERE symbol_id = ?",
-                (symbol_id,),
-            )
-            row = cur.fetchone()
-            return int(row[0]) if row and row[0] else None
-        finally:
-            conn.close()
-    except Exception as exc:  # noqa: BLE001
-        logger.debug("check_edit_safe: runtime hits skipped: %s", exc, exc_info=True)
-        return None
 
 
 def _check_signature_impact(
@@ -93,7 +56,7 @@ def _check_signature_impact(
             else:
                 imp_file = entry.get("file", "")
                 if imp_file and imp_file != target_file:
-                    if _is_test_file(imp_file):
+                    if is_test_file(imp_file):
                         test_import_count += 1
                     else:
                         ext_import_count += 1
@@ -119,7 +82,7 @@ def _check_signature_impact(
                 ref_file = ref.get("file", "")
                 if not ref_file or ref_file == target_file:
                     continue
-                if _is_test_file(ref_file):
+                if is_test_file(ref_file):
                     test_ref_count += 1
                 else:
                     internal_ref_count += 1
@@ -185,7 +148,7 @@ def check_edit_safe(
     owner, name = resolve_repo(repo, storage_path)
     store = IndexStore(base_path=storage_path)
 
-    target = _resolve_target(index, symbol)
+    target = resolve_target_symbol(index, symbol)
     if target is None:
         return {"error": f"Symbol not found: {symbol}"}
 
@@ -214,7 +177,7 @@ def check_edit_safe(
     _check_complexity_and_coverage(cyclomatic, total_external_callers, has_test_coverage, blockers)
 
     # ── Signal 4: Runtime observed usage ──
-    runtime_hits = _runtime_hits(store, owner, name, target_id) if include_runtime else None
+    runtime_hits = get_symbol_runtime_hits(store, owner, name, target_id, "check_edit_safe") if include_runtime else None
     if runtime_hits and runtime_hits > 0:
         blockers.append({
             "kind": "runtime_observed",
