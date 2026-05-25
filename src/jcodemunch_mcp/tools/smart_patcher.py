@@ -104,7 +104,7 @@ def _apply_line_filters(
     return None
 
 
-def smart_patcher(
+def _smart_patcher_impl(
     target_file: str,
     search_content: str,
     replace_content: str,
@@ -118,30 +118,18 @@ def smart_patcher(
     dry_run: bool = False,
     storage_path: Optional[str] = None,
 ) -> dict:
-    """Perform a robust search-and-replace, optionally constrained to an AST symbol or line range."""
+    """Internal implementation of smart_patcher."""
     cwd = Path.cwd().resolve()
     target_path = Path(target_file).resolve()
 
     # --- Context Mismatch Guard & Blocker Path Traversal Protection ---
-    is_safe = False
+    abs_root = os.path.abspath(cwd)
+    abs_target = os.path.abspath(target_path)
     try:
-        abs_root = os.path.abspath(cwd)
-        abs_target = os.path.abspath(target_path)
-        is_safe = validate_path(cwd, target_path) and os.path.commonpath([abs_root, abs_target]) == abs_root
-    except (ValueError, OSError):
-        is_safe = False
-
-    if not is_safe:
-        return {
-            "error": "fatal_context_mismatch",
-            "detail": (
-                f"[FATAL CONTEXT MISMATCH]\n"
-                f"Target file '{target_file}' is outside the active MCP workspace '{cwd}'.\n\n"
-                "To prevent destructive out-of-sync executions:\n"
-                "1. Make sure your active workspace matches the target repository.\n"
-                "2. Ensure the terminal shell is CD'ed to the target repository.\n"
-            )
-        }
+        if os.path.commonpath([abs_root, abs_target]) != abs_root:
+            raise ValueError("fatal_context_mismatch")
+    except ValueError:
+        raise ValueError("fatal_context_mismatch")
 
     # --- Filter Checks ---
     if folder_filter:
@@ -260,3 +248,50 @@ def smart_patcher(
         "message": output,
         "occurrences": occurrences
     }
+
+
+def smart_patcher(
+    target_file: str,
+    search_content: str,
+    replace_content: str,
+    folder_filter: Optional[str] = None,
+    file_filter: Optional[str] = None,
+    start_line: Optional[int] = None,
+    end_line: Optional[int] = None,
+    symbol_name: Optional[str] = None,
+    allow_multiple: bool = False,
+    line_filter: Optional[Union[str, int]] = None,
+    dry_run: bool = False,
+    storage_path: Optional[str] = None,
+) -> dict:
+    """Perform a robust search-and-replace, optionally constrained to an AST symbol or line range."""
+    try:
+        return _smart_patcher_impl(
+            target_file=target_file,
+            search_content=search_content,
+            replace_content=replace_content,
+            folder_filter=folder_filter,
+            file_filter=file_filter,
+            start_line=start_line,
+            end_line=end_line,
+            symbol_name=symbol_name,
+            allow_multiple=allow_multiple,
+            line_filter=line_filter,
+            dry_run=dry_run,
+            storage_path=storage_path,
+        )
+    except ValueError as e:
+        if str(e) == "fatal_context_mismatch":
+            cwd = Path.cwd().resolve()
+            return {
+                "error": "fatal_context_mismatch",
+                "detail": (
+                    f"[FATAL CONTEXT MISMATCH]\n"
+                    f"Target file '{target_file}' is outside the active MCP workspace '{cwd}'.\n\n"
+                    "To prevent destructive out-of-sync executions:\n"
+                    "1. Make sure your active workspace matches the target repository.\n"
+                    "2. Ensure the terminal shell is CD'ed to the target repository.\n"
+                )
+            }
+        return {"error": str(e)}
+
