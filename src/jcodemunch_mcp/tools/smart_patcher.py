@@ -123,7 +123,15 @@ def smart_patcher(
     target_path = Path(target_file).resolve()
 
     # --- Context Mismatch Guard & Blocker Path Traversal Protection ---
-    if not validate_path(cwd, target_path) or os.path.commonpath([str(cwd), str(target_path)]) != str(cwd):
+    is_safe = False
+    try:
+        abs_root = os.path.abspath(cwd)
+        abs_target = os.path.abspath(target_path)
+        is_safe = validate_path(cwd, target_path) and os.path.commonpath([abs_root, abs_target]) == abs_root
+    except (ValueError, OSError):
+        is_safe = False
+
+    if not is_safe:
         return {
             "error": "fatal_context_mismatch",
             "detail": (
