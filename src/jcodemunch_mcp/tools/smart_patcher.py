@@ -125,10 +125,7 @@ def _smart_patcher_impl(
     # --- Context Mismatch Guard & Blocker Path Traversal Protection ---
     abs_root = os.path.abspath(cwd)
     abs_target = os.path.abspath(target_path)
-    try:
-        if os.path.commonpath([abs_root, abs_target]) != abs_root:
-            raise ValueError("fatal_context_mismatch")
-    except ValueError:
+    if not abs_target.startswith(abs_root + os.sep) and abs_target != abs_root:
         raise ValueError("fatal_context_mismatch")
 
     # --- Filter Checks ---
