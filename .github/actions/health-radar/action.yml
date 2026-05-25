@@ -40,9 +40,9 @@ runs:
       shell: bash
       run: |
         if [ "${{ inputs.jcodemunch-version }}" = "latest" ]; then
-          pip install -U jcodemunch-mcp
+          pip install -U jcodemunch-mcp || pip install .
         else
-          pip install "jcodemunch-mcp==${{ inputs.jcodemunch-version }}"
+          pip install "jcodemunch-mcp==${{ inputs.jcodemunch-version }}" || pip install .
         fi
         jcodemunch-mcp --version || true
 
@@ -81,7 +81,7 @@ runs:
         ORIG_REF=$(git rev-parse HEAD)
         echo "$ORIG_REF" > "$RUNNER_TEMP/orig_ref"
 
-        git fetch origin "$BASE" --depth=1 || git fetch origin "$BASE"
+        git fetch origin "$BASE"
         git checkout "origin/$BASE" --quiet || git checkout "$BASE" --quiet
 
         # Re-index against the base tree.
