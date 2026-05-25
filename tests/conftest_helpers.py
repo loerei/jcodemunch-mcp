@@ -60,3 +60,20 @@ def get_index(repo: str, storage_path: str):
     store = SQLiteIndexStore(base_path=storage_path)
     parts = repo.split("/", 1)
     return store.load_index(parts[0], parts[1])
+
+
+def create_custom_index(tmp_path: Path, files: dict) -> tuple[str, str]:
+    """Create a custom indexed repo from a dict of relative files.
+
+    Returns (repo_id, storage_path_str).
+    """
+    from jcodemunch_mcp.tools.index_folder import index_folder
+
+    for rel, content in files.items():
+        p = tmp_path / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(content, encoding="utf-8")
+    storage = str(tmp_path / ".index")
+    result = index_folder(str(tmp_path), use_ai_summaries=False, storage_path=storage)
+    repo_id = result.get("repo", str(tmp_path))
+    return repo_id, storage

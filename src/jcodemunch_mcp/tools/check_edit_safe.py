@@ -13,7 +13,7 @@ import time
 from typing import Optional
 
 from ..storage import IndexStore, record_savings, estimate_savings, cost_avoided
-from ._utils import index_status_to_tool_error, resolve_repo
+from ._utils import load_repo_index_or_error, resolve_repo
 
 logger = logging.getLogger(__name__)
 
@@ -62,41 +62,17 @@ def _runtime_hits(store: IndexStore, owner: str, name: str, symbol_id: str) -> O
         return None
 
 
-def check_edit_safe(
-    repo: str,
-    symbol: str,
-    cross_repo: bool = True,
-    include_runtime: bool = True,
-    storage_path: Optional[str] = None,
-) -> dict:
-    """Composite preflight: can this symbol be edited safely?
-
-    Checks signature impact, complexity, missing tests, and runtime usage.
-    """
-    start = time.perf_counter()
-
-    try:
-        owner, name = resolve_repo(repo, storage_path)
-    except ValueError as e:
-        return {"error": str(e)}
-
-    store = IndexStore(base_path=storage_path)
-    index = store.load_index(owner, name)
-    if not index:
-        return index_status_to_tool_error(store.inspect_index(owner, name))
-
-    target = _resolve_target(index, symbol)
-    if target is None:
-        return {"error": f"Symbol not found: {symbol}"}
-
-    target_id = target["id"]
-    target_name = target.get("name", "")
-    target_file = target.get("file", "")
-
-    blockers: list[dict] = []
-
-    # ── Signal 1: External callers (Signature Impact) ──
-    external_import_count = 0
+def _check_signature_impact(
+    owner: str,
+    name: str,
+    target_file: str,
+    target_name: str,
+    cross_repo: bool,
+    storage_path: Optional[str],
+    blockers: list[dict],
+) -> tuple[int, int, int, int, int]:
+    """Analyze references and imports to assess signature impact."""
+    ext_import_count = 0
     test_import_count = 0
     cross_repo_count = 0
     try:
@@ -120,7 +96,7 @@ def check_edit_safe(
                     if _is_test_file(imp_file):
                         test_import_count += 1
                     else:
-                        external_import_count += 1
+                        ext_import_count += 1
                         blockers.append({
                             "kind": "external_import",
                             "file": imp_file,
@@ -157,8 +133,22 @@ def check_edit_safe(
     except Exception as exc:  # noqa: BLE001
         logger.debug("check_edit_safe: check_references skipped: %s", exc, exc_info=True)
 
-    # ── Signal 2: Complexity Check ──
-    cyclomatic = target.get("cyclomatic") or 0
+    return (
+        ext_import_count,
+        test_import_count,
+        cross_repo_count,
+        internal_ref_count,
+        test_ref_count,
+    )
+
+
+def _check_complexity_and_coverage(
+    cyclomatic: int,
+    total_external_callers: int,
+    has_test_coverage: bool,
+    blockers: list[dict],
+) -> None:
+    """Analyze cyclomatic complexity and missing test coverage indicators."""
     if cyclomatic > 10:
         blockers.append({
             "kind": "high_complexity",
@@ -167,16 +157,61 @@ def check_edit_safe(
             "detail": f"Complexity is high ({cyclomatic}), prone to regressions."
         })
 
-    # ── Signal 3: Missing test coverage ──
-    total_test_callers = test_ref_count + test_import_count
-    total_external_callers = external_import_count + internal_ref_count
-    has_test_coverage = total_test_callers > 0
     if total_external_callers > 0 and not has_test_coverage:
         blockers.append({
             "kind": "no_test_coverage",
             "severity": 3,
             "detail": "Symbol is actively referenced but has zero unit tests covering it."
         })
+
+
+def check_edit_safe(
+    repo: str,
+    symbol: str,
+    cross_repo: bool = True,
+    include_runtime: bool = True,
+    storage_path: Optional[str] = None,
+) -> dict:
+    """Composite preflight: can this symbol be edited safely?
+
+    Checks signature impact, complexity, missing tests, and runtime usage.
+    """
+    start = time.perf_counter()
+
+    index, err, _ = load_repo_index_or_error(repo, storage_path)
+    if err:
+        return err
+
+    owner, name = resolve_repo(repo, storage_path)
+    store = IndexStore(base_path=storage_path)
+
+    target = _resolve_target(index, symbol)
+    if target is None:
+        return {"error": f"Symbol not found: {symbol}"}
+
+    target_id = target["id"]
+    target_name = target.get("name", "")
+    target_file = target.get("file", "")
+
+    blockers: list[dict] = []
+
+    # ── Signal 1 & 3 (Signature Impact & Reference Counting) ──
+    (
+        external_import_count,
+        test_import_count,
+        cross_repo_count,
+        internal_ref_count,
+        test_ref_count,
+    ) = _check_signature_impact(
+        owner, name, target_file, target_name, cross_repo, storage_path, blockers
+    )
+
+    # ── Signal 2 & 3 (Complexity & Test Coverage Assertion) ──
+    cyclomatic = target.get("cyclomatic") or 0
+    total_test_callers = test_ref_count + test_import_count
+    total_external_callers = external_import_count + internal_ref_count
+    has_test_coverage = total_test_callers > 0
+    _check_complexity_and_coverage(cyclomatic, total_external_callers, has_test_coverage, blockers)
 
     # ── Signal 4: Runtime observed usage ──
     runtime_hits = _runtime_hits(store, owner, name, target_id) if include_runtime else None
@@ -220,12 +255,19 @@ def check_edit_safe(
     # Rank blockers by severity
     blockers.sort(key=lambda b: -b.get("severity", 0))
 
-    raw_bytes = int(target.get("byte_length", 0) or 0) + 1000
-    response_bytes = 800
-    tokens_saved = estimate_savings(raw_bytes, response_bytes)
-    total_saved = record_savings(tokens_saved, tool_name="check_edit_safe")
+    # Calculate performance and token metrics
+    symbol_bytes = int(target.get("byte_length", 0) or 0) + 1000
+    estimated_saved = estimate_savings(symbol_bytes, 800)
+    cumulative_saved = record_savings(estimated_saved, tool_name="check_edit_safe")
 
-    elapsed = (time.perf_counter() - start) * 1000
+    elapsed_ms = (time.perf_counter() - start) * 1000
+
+    timing_details = {
+        "timing_ms": round(elapsed_ms, 1),
+        "tokens_saved": estimated_saved,
+        "total_tokens_saved": cumulative_saved,
+        **cost_avoided(estimated_saved, cumulative_saved),
+    }
 
     result = {
         "verdict": verdict,
@@ -249,12 +291,7 @@ def check_edit_safe(
             "test_ref_count": test_ref_count,
             "cyclomatic": cyclomatic,
         },
-        "_meta": {
-            "timing_ms": round(elapsed, 1),
-            "tokens_saved": tokens_saved,
-            "total_tokens_saved": total_saved,
-            **cost_avoided(tokens_saved, total_saved),
-        },
+        "_meta": timing_details,
     }
     if runtime_hits is not None:
         result["signals"]["runtime_hits"] = runtime_hits

@@ -4,18 +4,7 @@ from pathlib import Path
 import pytest
 
 from jcodemunch_mcp.tools.check_edit_safe import check_edit_safe
-from jcodemunch_mcp.tools.index_folder import index_folder
-
-
-def _make_repo(tmp_path: Path, files: dict) -> tuple[str, str]:
-    for rel, content in files.items():
-        p = tmp_path / rel
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(content, encoding="utf-8")
-    storage = str(tmp_path / ".index")
-    result = index_folder(str(tmp_path), use_ai_summaries=False, storage_path=storage)
-    repo_id = result.get("repo", str(tmp_path))
-    return repo_id, storage
+from .conftest_helpers import create_custom_index
 
 
 _SAFE_REPO = {
@@ -55,21 +44,21 @@ _COMPLEX_REPO = {
 
 class TestCheckEditSafe:
     def test_isolated_function_returns_safe_to_edit(self, tmp_path):
-        repo, storage = _make_repo(tmp_path, _SAFE_REPO)
+        repo, storage = create_custom_index(tmp_path, _SAFE_REPO)
         result = check_edit_safe(repo, symbol="orphan_func", storage_path=storage)
         assert "error" not in result, result
         assert result["verdict"] == "safe_to_edit"
         assert result["confidence"] >= 0.9
 
     def test_used_function_returns_signature_impact(self, tmp_path):
-        repo, storage = _make_repo(tmp_path, _SAFE_REPO)
+        repo, storage = create_custom_index(tmp_path, _SAFE_REPO)
         result = check_edit_safe(repo, symbol="used_func", storage_path=storage)
         assert "error" not in result
         assert result["verdict"] == "signature_impact_risky"
         assert result["confidence"] <= 0.65
 
     def test_complexity_risky(self, tmp_path):
-        repo, storage = _make_repo(tmp_path, _COMPLEX_REPO)
+        repo, storage = create_custom_index(tmp_path, _COMPLEX_REPO)
         result = check_edit_safe(repo, symbol="complex_func", storage_path=storage)
         assert "error" not in result
         # Should be classified as complexity_risky since cyclomatic > 10
@@ -78,6 +67,6 @@ class TestCheckEditSafe:
         assert "highly complex" in result["recommended_action"].lower()
 
     def test_unknown_symbol(self, tmp_path):
-        repo, storage = _make_repo(tmp_path, _SAFE_REPO)
+        repo, storage = create_custom_index(tmp_path, _SAFE_REPO)
         result = check_edit_safe(repo, symbol="DoesNotExist", storage_path=storage)
         assert "error" in result
