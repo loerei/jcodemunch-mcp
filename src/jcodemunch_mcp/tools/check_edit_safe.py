@@ -25,16 +25,15 @@ logger = logging.getLogger(__name__)
 
 
 
-def _check_signature_impact(
+def _check_importers_impact(
     owner: str,
     name: str,
     target_file: str,
-    target_name: str,
     cross_repo: bool,
     storage_path: Optional[str],
     blockers: list[dict],
-) -> tuple[int, int, int, int, int]:
-    """Analyze references and imports to assess signature impact."""
+) -> tuple[int, int, int]:
+    """Check find_importers to determine external and cross-repo import impacts."""
     ext_import_count = 0
     test_import_count = 0
     cross_repo_count = 0
@@ -68,6 +67,18 @@ def _check_signature_impact(
     except Exception as exc:  # noqa: BLE001
         logger.debug("check_edit_safe: find_importers skipped: %s", exc, exc_info=True)
 
+    return ext_import_count, test_import_count, cross_repo_count
+
+
+def _check_references_impact(
+    owner: str,
+    name: str,
+    target_file: str,
+    target_name: str,
+    storage_path: Optional[str],
+    blockers: list[dict],
+) -> tuple[int, int]:
+    """Check check_references to count internal references and test callers."""
     internal_ref_count = 0
     test_ref_count = 0
     try:
@@ -96,6 +107,25 @@ def _check_signature_impact(
     except Exception as exc:  # noqa: BLE001
         logger.debug("check_edit_safe: check_references skipped: %s", exc, exc_info=True)
 
+    return internal_ref_count, test_ref_count
+
+
+def _check_signature_impact(
+    owner: str,
+    name: str,
+    target_file: str,
+    target_name: str,
+    cross_repo: bool,
+    storage_path: Optional[str],
+    blockers: list[dict],
+) -> tuple[int, int, int, int, int]:
+    """Analyze references and imports to assess signature impact."""
+    ext_import_count, test_import_count, cross_repo_count = _check_importers_impact(
+        owner, name, target_file, cross_repo, storage_path, blockers
+    )
+    internal_ref_count, test_ref_count = _check_references_impact(
+        owner, name, target_file, target_name, storage_path, blockers
+    )
     return (
         ext_import_count,
         test_import_count,

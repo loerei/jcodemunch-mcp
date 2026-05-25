@@ -4,24 +4,8 @@ from pathlib import Path
 import pytest
 
 from jcodemunch_mcp.tools.check_edit_safe import check_edit_safe
-from .conftest_helpers import create_custom_index
+from .conftest_helpers import create_custom_index, SAFE_REPO_FIXTURE
 
-
-_SAFE_REPO = {
-    "used.py": (
-        "def used_func():\n"
-        "    return 1\n"
-    ),
-    "lonely.py": (
-        "def orphan_func():\n"
-        "    return 'isolated'\n"
-    ),
-    "consumer.py": (
-        "from used import used_func\n\n"
-        "def consume():\n"
-        "    return used_func() + 1\n"
-    ),
-}
 
 _COMPLEX_REPO = {
     "complex_file.py": (
@@ -44,14 +28,14 @@ _COMPLEX_REPO = {
 
 class TestCheckEditSafe:
     def test_isolated_function_returns_safe_to_edit(self, tmp_path):
-        repo, storage = create_custom_index(tmp_path, _SAFE_REPO)
+        repo, storage = create_custom_index(tmp_path, SAFE_REPO_FIXTURE)
         result = check_edit_safe(repo, symbol="orphan_func", storage_path=storage)
         assert "error" not in result, result
         assert result["verdict"] == "safe_to_edit"
         assert result["confidence"] >= 0.9
 
     def test_used_function_returns_signature_impact(self, tmp_path):
-        repo, storage = create_custom_index(tmp_path, _SAFE_REPO)
+        repo, storage = create_custom_index(tmp_path, SAFE_REPO_FIXTURE)
         result = check_edit_safe(repo, symbol="used_func", storage_path=storage)
         assert "error" not in result
         assert result["verdict"] == "signature_impact_risky"
@@ -67,6 +51,6 @@ class TestCheckEditSafe:
         assert "highly complex" in result["recommended_action"].lower()
 
     def test_unknown_symbol(self, tmp_path):
-        repo, storage = create_custom_index(tmp_path, _SAFE_REPO)
+        repo, storage = create_custom_index(tmp_path, SAFE_REPO_FIXTURE)
         result = check_edit_safe(repo, symbol="DoesNotExist", storage_path=storage)
         assert "error" in result
