@@ -5552,7 +5552,7 @@ def _generate_claude_md_snippet(missing_only: bool = False) -> str:
                            "get_dependency_graph", "get_class_hierarchy",
                            "get_related_symbols", "get_call_hierarchy",
                            "find_implementations"]),
-        ("Impact & Safety", ["get_blast_radius", "check_rename_safe", "check_delete_safe",
+        ("Impact & Safety", ["get_blast_radius", "check_rename_safe", "check_delete_safe", "check_edit_safe",
                               "get_impact_preview", "get_changed_symbols",
                               "plan_refactoring", "get_symbol_provenance",
                               "get_pr_risk_profile"]),
