@@ -31,8 +31,13 @@ jobs:
       - name: Install dependencies
         run: uv sync --group dev --extra watch
 
-      - name: Run tests
+      - name: Run tests (Linux with Coverage)
+        if: runner.os == 'Linux'
         run: uv run pytest tests/ -v --tb=short --cov=src --cov-report=term-missing
+
+      - name: Run tests (Windows)
+        if: runner.os == 'Windows'
+        run: uv run pytest tests/ -v --tb=short
 
       - name: Verify sdist contains no sensitive paths
         if: runner.os == 'Linux'
