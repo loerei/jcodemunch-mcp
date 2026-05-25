@@ -34,40 +34,44 @@ def _check_importers_impact(
     blockers: list[dict],
 ) -> tuple[int, int, int]:
     """Check find_importers to determine external and cross-repo import impacts."""
-    ext_import_count = 0
-    test_import_count = 0
-    cross_repo_count = 0
+    logger.info("Evaluating importer impact signals for file: %s", target_file)
+    ext_imports = 0
+    test_imports = 0
+    cross_repos = 0
     try:
         from .find_importers import find_importers  # noqa: PLC0415
-        importers_out = find_importers(
+        outcome = find_importers(
             repo=f"{owner}/{name}", file_path=target_file,
             cross_repo=cross_repo, storage_path=storage_path,
         )
-        for entry in importers_out.get("importers", []) or []:
-            if entry.get("cross_repo"):
-                cross_repo_count += 1
+        importers_list = outcome.get("importers", []) or []
+        for imp in importers_list:
+            if imp.get("cross_repo"):
+                cross_repos += 1
                 blockers.append({
                     "kind": "cross_repo_import",
-                    "repo": entry.get("source_repo", ""),
-                    "file": entry.get("file", ""),
+                    "repo": imp.get("source_repo", ""),
+                    "file": imp.get("file", ""),
                     "severity": 4,
+                    "info": "detected via cross-repository static mapping",
                 })
             else:
-                imp_file = entry.get("file", "")
-                if imp_file and imp_file != target_file:
-                    if is_test_file(imp_file):
-                        test_import_count += 1
+                f_path = imp.get("file", "")
+                if f_path and f_path != target_file:
+                    if is_test_file(f_path):
+                        test_imports += 1
                     else:
-                        ext_import_count += 1
+                        ext_imports += 1
                         blockers.append({
                             "kind": "external_import",
-                            "file": imp_file,
+                            "file": f_path,
                             "severity": 3,
+                            "info": "direct external dependency in source tree",
                         })
     except Exception as exc:  # noqa: BLE001
-        logger.debug("check_edit_safe: find_importers skipped: %s", exc, exc_info=True)
+        logger.warning("Importer signals evaluation skipped due to: %s", exc)
 
-    return ext_import_count, test_import_count, cross_repo_count
+    return ext_imports, test_imports, cross_repos
 
 
 def _check_references_impact(
@@ -79,35 +83,39 @@ def _check_references_impact(
     blockers: list[dict],
 ) -> tuple[int, int]:
     """Check check_references to count internal references and test callers."""
-    internal_ref_count = 0
-    test_ref_count = 0
+    logger.info("Scanning reference occurrences for identifier: %s", target_name)
+    internal_refs = 0
+    test_refs = 0
     try:
         from .check_references import check_references  # noqa: PLC0415
-        ref_out = check_references(
+        references_payload = check_references(
             repo=f"{owner}/{name}", identifier=target_name,
             search_content=True, max_content_results=20,
             storage_path=storage_path,
         )
-        for entry in ref_out.get("results", []) or []:
-            for ref in entry.get("content_references", []) or []:
-                ref_file = ref.get("file", "")
-                if not ref_file or ref_file == target_file:
+        results_list = references_payload.get("results", []) or []
+        for res_entry in results_list:
+            content_refs = res_entry.get("content_references", []) or []
+            for ref_item in content_refs:
+                file_name = ref_item.get("file", "")
+                if not file_name or file_name == target_file:
                     continue
-                if is_test_file(ref_file):
-                    test_ref_count += 1
+                if is_test_file(file_name):
+                    test_refs += 1
                 else:
-                    internal_ref_count += 1
-                    if internal_ref_count <= 3:
+                    internal_refs += 1
+                    if internal_refs <= 3:
                         blockers.append({
                             "kind": "internal_reference",
-                            "file": ref_file,
-                            "line": ref.get("line", 0),
+                            "file": file_name,
+                            "line": ref_item.get("line", 0),
                             "severity": 2,
+                            "info": "internal call site in source directory",
                         })
     except Exception as exc:  # noqa: BLE001
-        logger.debug("check_edit_safe: check_references skipped: %s", exc, exc_info=True)
+        logger.warning("Reference occurrences scan skipped due to: %s", exc)
 
-    return internal_ref_count, test_ref_count
+    return internal_refs, test_refs
 
 
 def _check_signature_impact(
