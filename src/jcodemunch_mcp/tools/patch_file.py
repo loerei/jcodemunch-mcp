@@ -1,4 +1,4 @@
-"""Highly robust, AST-bounded file editor (smart_patcher)."""
+"""Highly robust, AST-bounded file editor (patch_file)."""
 
 import difflib
 import os
@@ -179,7 +179,7 @@ def _resolve_allowed_base_dir(
     return base_dir
 
 
-def _smart_patcher_impl(
+def _patch_file_impl(
     target_file: str,
     search_content: str,
     replace_content: str,
@@ -193,7 +193,7 @@ def _smart_patcher_impl(
     dry_run: bool = False,
     storage_path: Optional[str] = None,
 ) -> dict:
-    """Internal implementation of smart_patcher."""
+    """Internal implementation of patch_file."""
     cwd = Path.cwd().resolve()
     base_dir = os.path.abspath(cwd)
     base_dir = _resolve_allowed_base_dir(target_file, base_dir, storage_path)
@@ -298,7 +298,7 @@ def _smart_patcher_impl(
     }
 
 
-def smart_patcher(
+def patch_file(
     target_file: str,
     search_content: str,
     replace_content: str,
@@ -325,7 +325,7 @@ def smart_patcher(
         if not resolved_path.startswith(base_dir + os.sep) and resolved_path != base_dir:
             raise ValueError("fatal_context_mismatch")
 
-        return _smart_patcher_impl(
+        return _patch_file_impl(
             target_file=resolved_path,
             search_content=search_content,
             replace_content=replace_content,

@@ -1387,7 +1387,7 @@ def generate_template() -> str:
         "search_symbols",
         "search_text",
         "set_tool_tier",
-        "smart_patcher",
+        "patch_file",
         "suggest_queries",
         "summarize_repo",
         "test_summarizer",

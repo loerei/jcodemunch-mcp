@@ -97,7 +97,7 @@ _CANONICAL_TOOL_NAMES: tuple[str, ...] = (
     # Self-guide (force-included; lets one-line CLAUDE.md pull full policy on demand)
     "jcodemunch_guide",
     # Write tools
-    "smart_patcher",
+    "patch_file",
 )
 
 # --------------------------------------------------------------------------- #
@@ -3338,12 +3338,12 @@ def _build_tools_list() -> list[Tool]:
             },
         ),
     ]
-    # Add smart_patcher conditionally if write is enabled
+    # Add patch_file conditionally if write is enabled
     _write_enabled = os.environ.get("JCODEMUNCH_ENABLE_WRITE", "").strip().lower() in ("true", "1", "yes", "on")
     if _write_enabled:
         all_tools.append(
             Tool(
-                name="smart_patcher",
+                name="patch_file",
                 description=(
                     "Highly robust, AST-bounded file editor. Performs constrained search-and-replace "
                     "on a file, restricted by line ranges or AST symbol boundaries, with deep safety "
@@ -3408,7 +3408,7 @@ def _build_tools_list() -> list[Tool]:
     profile = _effective_profile()
     allowed = _resolve_tier_bundle(profile)
     if allowed is not None:
-        tools = [t for t in tools if t.name in allowed or t.name == "smart_patcher"]
+        tools = [t for t in tools if t.name in allowed or t.name == "patch_file"]
 
     # Filter out disabled tools. _UNDISABLEABLE_TOOLS (runtime tier controls)
     # are never removed by default — disabling them would lock the user out of
@@ -4795,11 +4795,11 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 "version": _ver,
                 "content": _generate_claude_md_snippet(missing_only=False),
             }
-        elif name == "smart_patcher":
-            from .tools.smart_patcher import smart_patcher
+        elif name == "patch_file":
+            from .tools.patch_file import patch_file
             result = await asyncio.to_thread(
                 functools.partial(
-                    smart_patcher,
+                    patch_file,
                     target_file=arguments["targetFile"],
                     search_content=arguments["searchContent"],
                     replace_content=arguments["replaceContent"],
@@ -5665,7 +5665,7 @@ def _generate_claude_md_snippet(missing_only: bool = False) -> str:
         ]),
         ("Runtime Tier Switching", ["set_tool_tier", "announce_model"]),
         ("Self-Guide", ["jcodemunch_guide"]),
-        ("Write Tools", ["smart_patcher"]),
+        ("Write Tools", ["patch_file"]),
     ]
     from . import __version__ as _ver
     lines = [

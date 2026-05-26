@@ -1388,7 +1388,7 @@ def test_all_canonical_tools_accounted_in_tier_bundles():
         # Diagnostic / write tools
         "test_summarizer",
         "register_edit",
-        "smart_patcher",
+        "patch_file",
         # Runtime tier-switching tools (force-included regardless of tier)
         "set_tool_tier",
         "announce_model",

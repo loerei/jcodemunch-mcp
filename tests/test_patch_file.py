@@ -1,23 +1,23 @@
-"""Tests for smart_patcher tool."""
+"""Tests for patch_file tool."""
 
 from pathlib import Path
 import pytest
 
-from jcodemunch_mcp.tools.smart_patcher import smart_patcher
+from jcodemunch_mcp.tools.patch_file import patch_file
 from jcodemunch_mcp.tools.index_folder import index_folder
 from jcodemunch_mcp.tools.resolve_repo import _compute_repo_id
 
 
-class TestSmartPatcher:
+class TestPatchFile:
     def test_context_mismatch_guard(self, tmp_path):
-        """smart_patcher must refuse to edit a file outside the active workspace."""
+        """patch_file must refuse to edit a file outside the active workspace."""
         external_dir = tmp_path / "external"
         external_dir.mkdir()
         external_file = external_dir / "app.py"
         external_file.write_text("print('hello')\n")
 
-        # Call smart_patcher pointing outside the current working directory
-        res = smart_patcher(
+        # Call patch_file pointing outside the current working directory
+        res = patch_file(
             target_file=str(external_file),
             search_content="hello",
             replace_content="world",
@@ -28,12 +28,12 @@ class TestSmartPatcher:
         assert res["error"] == "fatal_context_mismatch"
 
     def test_dry_run_generates_diff(self, tmp_path, monkeypatch):
-        """smart_patcher must return a diff on dry_run and not modify the file."""
+        """patch_file must return a diff on dry_run and not modify the file."""
         monkeypatch.chdir(tmp_path)
         app_file = tmp_path / "app.py"
         app_file.write_text("line 1\nline 2\nline 3\n")
 
-        res = smart_patcher(
+        res = patch_file(
             target_file="app.py",
             search_content="line 2",
             replace_content="modified line 2",
@@ -48,12 +48,12 @@ class TestSmartPatcher:
         assert app_file.read_text() == "line 1\nline 2\nline 3\n"
 
     def test_patch_success(self, tmp_path, monkeypatch):
-        """smart_patcher must successfully modify the file."""
+        """patch_file must successfully modify the file."""
         monkeypatch.chdir(tmp_path)
         app_file = tmp_path / "app.py"
         app_file.write_text("line 1\nline 2\nline 3\n")
 
-        res = smart_patcher(
+        res = patch_file(
             target_file="app.py",
             search_content="line 2",
             replace_content="modified line 2",
@@ -66,7 +66,7 @@ class TestSmartPatcher:
         assert app_file.read_text() == "line 1\nmodified line 2\nline 3\n"
 
     def test_folder_and_file_filters(self, tmp_path, monkeypatch):
-        """smart_patcher must respect folder_filter and file_filter."""
+        """patch_file must respect folder_filter and file_filter."""
         monkeypatch.chdir(tmp_path)
         src_dir = tmp_path / "src"
         src_dir.mkdir()
@@ -74,7 +74,7 @@ class TestSmartPatcher:
         app_file.write_text("test content\n")
 
         # Wrong folder filter
-        res = smart_patcher(
+        res = patch_file(
             target_file="src/app.py",
             search_content="test",
             replace_content="best",
@@ -84,7 +84,7 @@ class TestSmartPatcher:
         assert "error" in res
 
         # Correct folder filter
-        res = smart_patcher(
+        res = patch_file(
             target_file="src/app.py",
             search_content="test",
             replace_content="best",
@@ -94,7 +94,7 @@ class TestSmartPatcher:
         assert "success" in res
 
         # Wrong file filter
-        res = smart_patcher(
+        res = patch_file(
             target_file="src/app.py",
             search_content="test",
             replace_content="best",
@@ -104,7 +104,7 @@ class TestSmartPatcher:
         assert "error" in res
 
         # Correct file filter
-        res = smart_patcher(
+        res = patch_file(
             target_file="src/app.py",
             search_content="test",
             replace_content="best",
@@ -114,13 +114,13 @@ class TestSmartPatcher:
         assert "success" in res
 
     def test_line_filter_assertions(self, tmp_path, monkeypatch):
-        """smart_patcher must respect numeric and string line_filter assertions."""
+        """patch_file must respect numeric and string line_filter assertions."""
         monkeypatch.chdir(tmp_path)
         app_file = tmp_path / "app.py"
         app_file.write_text("line 1\nline 2\nline 3\n")
 
         # Numeric line_filter matches actual line
-        res = smart_patcher(
+        res = patch_file(
             target_file="app.py",
             search_content="line 2",
             replace_content="modified",
@@ -130,7 +130,7 @@ class TestSmartPatcher:
         assert "success" in res
 
         # Numeric line_filter mismatch
-        res = smart_patcher(
+        res = patch_file(
             target_file="app.py",
             search_content="line 2",
             replace_content="modified",
@@ -140,7 +140,7 @@ class TestSmartPatcher:
         assert "error" in res
 
         # String line_filter match
-        res = smart_patcher(
+        res = patch_file(
             target_file="app.py",
             search_content="line 2",
             replace_content="modified",
@@ -150,7 +150,7 @@ class TestSmartPatcher:
         assert "success" in res
 
         # String line_filter mismatch
-        res = smart_patcher(
+        res = patch_file(
             target_file="app.py",
             search_content="line 2",
             replace_content="modified",
@@ -160,13 +160,13 @@ class TestSmartPatcher:
         assert "error" in res
 
     def test_allow_multiple_check(self, tmp_path, monkeypatch):
-        """smart_patcher must refuse to modify multiple matches by default unless allow_multiple is True."""
+        """patch_file must refuse to modify multiple matches by default unless allow_multiple is True."""
         monkeypatch.chdir(tmp_path)
         app_file = tmp_path / "app.py"
         app_file.write_text("dup\ndup\n")
 
         # Default is False
-        res = smart_patcher(
+        res = patch_file(
             target_file="app.py",
             search_content="dup",
             replace_content="new",
@@ -176,7 +176,7 @@ class TestSmartPatcher:
         assert "error" in res
 
         # Explicit True
-        res = smart_patcher(
+        res = patch_file(
             target_file="app.py",
             search_content="dup",
             replace_content="new",
@@ -187,13 +187,13 @@ class TestSmartPatcher:
         assert res["occurrences"] == 2
 
     def test_line_range_boundary(self, tmp_path, monkeypatch):
-        """smart_patcher must restrict search and replace to the specified line boundaries."""
+        """patch_file must restrict search and replace to the specified line boundaries."""
         monkeypatch.chdir(tmp_path)
         app_file = tmp_path / "app.py"
         app_file.write_text("dup\ndup\ndup\n")
 
         # Scope lines 1-2 only (contains 2 occurrences)
-        res = smart_patcher(
+        res = patch_file(
             target_file="app.py",
             search_content="dup",
             replace_content="new",
@@ -207,7 +207,7 @@ class TestSmartPatcher:
         assert app_file.read_text() == "new\nnew\ndup\n"
 
     def test_ast_symbol_boundary(self, tmp_path, monkeypatch):
-        """smart_patcher must restrict search and replace to AST symbol_name boundaries by loading the index."""
+        """patch_file must restrict search and replace to AST symbol_name boundaries by loading the index."""
         monkeypatch.chdir(tmp_path)
         
         # Write a file containing a python function
@@ -224,8 +224,8 @@ class TestSmartPatcher:
         store_path = str(tmp_path / "store")
         index_folder(str(tmp_path), use_ai_summaries=False, storage_path=store_path, identity_mode="local")
         
-        # Call smart_patcher with symbol_name boundary (restricts to target_func, lines 1-3)
-        res = smart_patcher(
+        # Call patch_file with symbol_name boundary (restricts to target_func, lines 1-3)
+        res = patch_file(
             target_file="app.py",
             search_content="dup",
             replace_content="new",
@@ -248,7 +248,7 @@ class TestSmartPatcher:
         assert app_file.read_text() == expected_content
 
     def test_external_workspace_indexed_repo(self, tmp_path, monkeypatch):
-        """smart_patcher must allow editing files inside an indexed repo even if CWD is outside."""
+        """patch_file must allow editing files inside an indexed repo even if CWD is outside."""
         # Set CWD to an external directory (simulating AppData programs directory)
         external_cwd = tmp_path / "appdata_cwd"
         external_cwd.mkdir()
@@ -263,8 +263,8 @@ class TestSmartPatcher:
         store_path = str(tmp_path / "store")
         index_folder(str(workspace_dir), use_ai_summaries=False, storage_path=store_path, identity_mode="local")
 
-        # Call smart_patcher with absolute path of target file (which is under indexed workspace_dir)
-        res = smart_patcher(
+        # Call patch_file with absolute path of target file (which is under indexed workspace_dir)
+        res = patch_file(
             target_file=str(app_file),
             search_content="hello",
             replace_content="world",

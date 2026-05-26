@@ -277,7 +277,7 @@ find-and-replace, plus import rewrites, collision detection, new file generation
 
 ### AST-Bounded Patcher
 
-`smart_patcher` performs a robust search-and-replace edit on a file, optionally constrained within AST boundaries of a specified symbol or a line range. It includes safety checks for context mismatches, path traversal guards, line assertion filters, and a visual `dry_run` diff generator to preview changes before writing to disk.
+`patch_file` performs a robust search-and-replace edit on a file, optionally constrained within AST boundaries of a specified symbol or a line range. It includes safety checks for context mismatches, path traversal guards, line assertion filters, and a visual `dry_run` diff generator to preview changes before writing to disk.
 
 
 ### Calibrated retrieval signals (v1.74.0+ telemetry initiative)
