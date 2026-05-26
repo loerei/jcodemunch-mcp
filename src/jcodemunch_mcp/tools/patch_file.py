@@ -1,4 +1,4 @@
-"""Highly robust, AST-bounded file editor (patch_file)."""
+"""AST-bounded file editor (patch_file)."""
 
 import difflib
 import os
@@ -259,7 +259,7 @@ def _patch_file_impl(
 
     if dry_run:
         diff_text = generate_diff(file_content, patched_file, target_file)
-        output = f"🔍 **[DRY RUN] Diff for patch proposal:**\n\n```diff\n{diff_text}```\n"
+        output = f"```diff\n{diff_text}```\n"
         output += f"- Target file: `{target_file}`\n"
         output += f"- Match occurrences inside scope: **{occurrences}**\n"
         if symbol_name:
@@ -280,8 +280,7 @@ def _patch_file_impl(
     except Exception as e:
         return {"error": f"Failed to write patched file: {e}"}
 
-    output = "✅ **File patched successfully!**\n"
-    output += f"- Target file: `{target_file}`\n"
+    output = f"- Target file: `{target_file}`\n"
     output += f"- Replaced occurrences: **{occurrences}**\n"
     if symbol_name:
         output += f"- Scope: AST symbol `{symbol_name}` (lines {start_idx + 1}-{end_idx + 1})\n"
