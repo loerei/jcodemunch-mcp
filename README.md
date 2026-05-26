@@ -275,6 +275,11 @@ Useful for onboarding, debugging, refactoring, impact analysis, and exploring un
 signature change operations. Returns `{old_text, new_text}` blocks compatible with any editor's
 find-and-replace, plus import rewrites, collision detection, new file generation, and multi-file coordination.
 
+### AST-Bounded Patcher
+
+`smart_patcher` performs a robust search-and-replace edit on a file, optionally constrained within AST boundaries of a specified symbol or a line range. It includes safety checks for context mismatches, path traversal guards, line assertion filters, and a visual `dry_run` diff generator to preview changes before writing to disk.
+
+
 ### Calibrated retrieval signals (v1.74.0+ telemetry initiative)
 
 Every retrieval result now ships with three machine-readable health signals so agents can stop guessing whether to trust the response:

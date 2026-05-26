@@ -597,6 +597,7 @@ These IDs stay stable across re-indexing as long as path, qualified name, and ki
 | `get_session_context` | Returns session history: files read, searches run, edits made, tool call counts — use to avoid re-reading the same files | — |
 | `get_session_snapshot` | Compact ~200-token markdown summary of session state (focus files, edits, searches, negative evidence) — designed for context injection after compaction | — |
 | `register_edit` | Post-edit cache invalidation: clears BM25 and search caches for edited files, optionally reindexes | `file_path`, `reindex` |
+| `smart_patcher` | Highly robust search-and-replace edit on a file, optionally constrained within AST boundaries of a specified symbol or a line range | `target_file`, `search_content`, `replace_content`, `folder_filter`, `file_filter`, `start_line`, `end_line`, `symbol_name`, `allow_multiple`, `line_filter`, `dry_run`, `storage_path` |
 | `get_dead_code_v2` | Multi-signal dead code detection: entry-point reachability, call graph, reference search, framework awareness | `repo`, `min_confidence`, `include_tests` |
 
 ### Utilities
